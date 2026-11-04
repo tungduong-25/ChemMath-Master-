@@ -1,1 +1,2815 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>ChemMath AI Master - Hệ sinh thái Tự học Hóa học & Toán học Thông minh</title>
 
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- FontAwesome 6 Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- KaTeX + mhchem CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js"></script>
+
+  <!-- Supabase JS SDK CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- React 18 & ReactDOM 18 CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel Standalone CDN -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    :root {
+      --app-scale: 1;
+    }
+    html {
+      font-size: calc(16px * var(--app-scale));
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      user-select: none;
+      -webkit-font-smoothing: antialiased;
+    }
+    .selectable-text {
+      user-select: text;
+    }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.25);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.45);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.7);
+    }
+    .katex-display {
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 0.35rem 0;
+      margin: 0.35rem 0 !important;
+    }
+    .katex {
+      font-size: calc(1.04em * var(--app-scale));
+    }
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.65; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.02); }
+    }
+    .animate-glow {
+      animation: pulseGlow 4s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // ============================================================================
+    // 1. HẰNG SỐ CẤU HÌNH HỆ THỐNG DUY NHẤT (CHỈ CHỈNH SỬA TRONG FILE CODE)
+    // ============================================================================
+    const APP_CONFIG = {
+      GEMINI_API_KEY: "ĐIỀN_GEMINI_API_KEY_CỦA_BẠN_TẠI_ĐÂY",
+      GEMINI_MODEL: "gemini-2.5-flash",
+      SUPABASE_URL: "https://chemmaster-edtech-vn.supabase.co",
+      SUPABASE_ANON_KEY: "ĐIỀN_SUPABASE_ANON_KEY_TẠI_ĐÂY",
+      GOOGLE_OAUTH_CLIENT_ID: "ĐIỀN_GOOGLE_CLIENT_ID_TẠI_ĐÂY",
+      GMAIL_REPORT_WEBHOOK_URL: "https://script.google.com/macros/s/.../exec",
+      GOOGLE_SHEETS_SYNC_WEBHOOK_URL: "https://script.google.com/macros/s/.../exec",
+      DEFAULT_RECEIVER_GMAIL: "email_nhan_bao_cao@gmail.com",
+      AUTHOR_INFO: {
+        projectName: "ChemMath AI Master - Trợ lý Hóa học & Toán học KHTN",
+        authorName: "Tên Tác Giả",
+        schoolName: "Tên Trường THPT",
+        supportEmail: "email_ho_tro@gmail.com",
+        hotline: "(+84) 0987 654 321"
+      }
+    };
+
+    // ============================================================================
+    // 2. SYSTEM INSTRUCTION BẮT BUỘC CHO GEMINI API (FIRST-PRINCIPLES & ZERO ROUNDING)
+    // ============================================================================
+    const GEMINI_SYSTEM_INSTRUCTION = `Bạn là Chuyên gia Giải toán & Hóa học KHTN theo phương pháp Nguyên lý gốc (First Principles). BẮT BUỘC tuân thủ nghiêm ngặt các quy tắc sau:
+1. Giải từ nguyên lý gốc (First Principles): Trình bày tường minh từng bước biến đổi đại số, bảo toàn nguyên tố, bảo toàn electron và bảo toàn điện tích. Mọi công thức viết trong cặp dấu $...$ hoặc $$...$$.
+2. Chuẩn xác hệ số cân bằng & electron: Khi oxi hóa FeC2O4 tạo muối Fe2(SO4)3 có 2 nguyên tử Fe ở vế phải, bán phản ứng chuẩn là $2\\text{FeC}_2\\text{O}_4 \\rightarrow 2\\text{Fe}^{3+} + 4\\text{CO}_2 + 6\\text{e}$ (hoặc $\\text{FeC}_2\\text{O}_4 \\rightarrow \\text{Fe}^{3+} + 2\\text{CO}_2 + 3\\text{e}$); với $0,2\\text{ mol}$ $\\text{FeC}_2\\text{O}_4$ thì số mol electron trao đổi bằng $0,6\\text{ mol}$.
+3. Chuẩn xác Phân tử khối (M), Thể tích & Phổ IR:
+   - Gắn thêm 1 nhóm -OH vào vòng thơm của Catechin ($\\text{C}_{15}\\text{H}_{14}\\text{O}_6$, $M = 290\\text{ g/mol}$) là thay thế 1 nguyên tử H bằng nhóm -OH (tăng $-1 + 17 = +16\\text{ đvC}$), nên phân tử khối tăng $+16\\text{ đvC}$ thành $M = 306\\text{ g/mol}$ ($\\text{C}_{15}\\text{H}_{14}\\text{O}_7$).
+   - Hợp chất triglyceride X ($\\text{C}_{57}\\text{H}_{102}\\text{O}_6$) có $M_{\\text{X}} = 57 \\times 12 + 102 \\times 1 + 6 \\times 16 = 882\\text{ g/mol}$; thủy phân hoàn toàn $0,2\\text{ mol}$ X bằng dung dịch NaOH $1,5\\text{ M}$ cần $n_{\\text{NaOH}} = 3n_{\\text{X}} = 0,6\\text{ mol} \\Rightarrow V = \\frac{0,6}{1,5} = 0,4\\text{ L} = 400\\text{ mL}$.
+   - Trên phổ IR, peak hấp thụ mạnh và nhọn tại $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$ đặc trưng cho liên kết đôi $\\text{C=O}$ (nhóm carbonyl).
+4. Tuyệt đối không làm tròn số trung gian: Trong bài toán nhiệt đốt cháy xăng sinh học E5 hoặc tính toán nồng độ/thể tích, bắt buộc giữ nguyên phân số số mol trung gian ($n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}$, $n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$) và chỉ làm tròn duy nhất ở kết quả cuối cùng.`;
+
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // ============================================================================
+    // 3. BỘ DỰNG CÔNG THỨC MathChemText KHÔNG BAO GIỜ LỖI
+    // ============================================================================
+    function sanitizeLatexInput(raw) {
+      if (raw === null || raw === undefined) return "";
+      let str = String(raw);
+      // Khôi phục các ký tự thoát bị nuốt trong JSON (\t -> \text, \f -> \frac, \r -> \rightarrow, \b -> \beta)
+      str = str
+        .replace(/\t(?=[a-zA-Z])/g, "\\t")
+        .replace(/\f(?=[a-zA-Z])/g, "\\f")
+        .replace(/\r(?=[a-zA-Z])/g, "\\r")
+        .replace(/\x08(?=[a-zA-Z])/g, "\\b");
+
+      // Tự động đóng dấu $ bị lẻ
+      const singleDollarCount = (str.match(/(?<!\$)\$(?!\$)/g) || []).length;
+      if (singleDollarCount % 2 !== 0) {
+        str += "$";
+      }
+      return str;
+    }
+
+    function fallbackHtmlFormat(text) {
+      return text
+        .replace(/\\text\{([^}]*)\}/g, "$1")
+        .replace(/\\ce\{([^}]*)\}/g, "$1")
+        .replace(/\\rightarrow/g, "→")
+        .replace(/\\rightleftharpoons/g, "⇌")
+        .replace(/\\approx/g, "≈")
+        .replace(/\\Delta/g, "Δ")
+        .replace(/\\times/g, "×")
+        .replace(/\\cdot/g, "·")
+        .replace(/\\circ/g, "°")
+        .replace(/\\tilde\{\\nu\}/g, "ν̃")
+        .replace(/_\{([^}]+)\}/g, "<sub>$1</sub>")
+        .replace(/_([0-9a-zA-Z])/g, "<sub>$1</sub>")
+        .replace(/\^\{([^}]+)\}/g, "<sup>$1</sup>")
+        .replace(/\^([0-9a-zA-Z+\-°]+)/g, "<sup>$1</sup>");
+    }
+
+    function MathChemText({ content, className = "", block = false }) {
+      const renderedHtml = useMemo(() => {
+        const clean = sanitizeLatexInput(content);
+        if (!clean) return "";
+
+        const tokenRegex = /(\$\$[\s\S]+?\$\$|\$[^$]+?\$)/g;
+        const parts = clean.split(tokenRegex);
+
+        return parts
+          .map((part) => {
+            if (!part) return "";
+            const isDisplay = part.startsWith("$$") && part.endsWith("$$");
+            const isInline = !isDisplay && part.startsWith("$") && part.endsWith("$");
+
+            if (isDisplay || isInline) {
+              const mathExpr = isDisplay ? part.slice(2, -2).trim() : part.slice(1, -1).trim();
+              if (window.katex && typeof window.katex.renderToString === "function") {
+                try {
+                  return window.katex.renderToString(mathExpr, {
+                    displayMode: isDisplay || block,
+                    throwOnError: false,
+                    strict: false,
+                    trust: true
+                  });
+                } catch (e) {
+                  return `<span class="font-mono text-amber-300">${fallbackHtmlFormat(mathExpr)}</span>`;
+                }
+              }
+              return `<span class="font-mono">${fallbackHtmlFormat(mathExpr)}</span>`;
+            }
+
+            // Văn bản thường (chuyển xuống dòng thành <br/>)
+            return part
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+              .replace(/\n/g, "<br/>");
+          })
+          .join("");
+      }, [content, block]);
+
+      return (
+        <span
+          className={`selectable-text break-words leading-relaxed ${className}`}
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      );
+    }
+
+    // ============================================================================
+    // 4. NGÂN HÀNG CÂU HỎI PHONG PHÚ (HÓA HỌC & TOÁN HỌC - 3 ĐỊNH DẠNG)
+    // ============================================================================
+    const INITIAL_QUESTIONS = [
+      // --- HÓA HỌC ---
+      {
+        id: "CHEM_01",
+        subject: "chemistry",
+        topic: "Phản ứng Oxi hóa - Khử & Điện hóa",
+        level: "Vận dụng cao",
+        type: "mcq",
+        question: "Cho $0,2\\text{ mol}$ $\\text{FeC}_2\\text{O}_4$ tác dụng hoàn toàn với dung dịch $\\text{KMnO}_4$ dư trong môi trường $\\text{H}_2\\text{SO}_4$ loãng, nóng, thu được muối $\\text{Fe}_2(\\text{SO}_4)_3$ và khí $\\text{CO}_2$. Số mol electron mà $0,2\\text{ mol}$ $\\text{FeC}_2\\text{O}_4$ đã nhường là bao nhiêu?",
+        options: [
+          "A. $0,2\\text{ mol}$",
+          "B. $0,4\\text{ mol}$",
+          "C. $0,6\\text{ mol}$",
+          "D. $0,3\\text{ mol}$"
+        ],
+        correctAnswer: "C",
+        hint: "Xét cả sự thay đổi số oxi hóa của sắt ($\\text{Fe}^{+2} \\rightarrow \\text{Fe}^{+3}$) và 2 nguyên tử carbon ($\\text{C}^{+3} \\rightarrow \\text{C}^{+4}$) trong phân tử $\\text{FeC}_2\\text{O}_4$.",
+        trapNote: "Bẫy quên nhân hệ số 2 cho nguyên tử C hoặc bỏ sót sự nhường electron của ion $\\text{C}_2\\text{O}_4^{2-}$.",
+        explanation: "Từ nguyên lý bảo toàn electron: Trong $\\text{FeC}_2\\text{O}_4$, $\\text{Fe}^{+2}$ nhường $1\\text{e}$ thành $\\text{Fe}^{3+}$ và $2\\text{C}^{+3}$ nhường $2\\text{e}$ thành $2\\text{CO}_2$. Bán phản ứng chuẩn tạo muối $\\text{Fe}_2(\\text{SO}_4)_3$: $$2\\text{FeC}_2\\text{O}_4 \\rightarrow 2\\text{Fe}^{3+} + 4\\text{CO}_2 + 6\\text{e}$$ (tương đương $1\\text{ mol}$ $\\text{FeC}_2\\text{O}_4$ nhường $3\\text{ mol e}$). Vậy với $n_{\\text{FeC}_2\\text{O}_4} = 0,2\\text{ mol}$, số mol electron trao đổi là $n_e = 0,2 \\times 3 = 0,6\\text{ mol}$."
+      },
+      {
+        id: "CHEM_02",
+        subject: "chemistry",
+        topic: "Hợp chất Hữu cơ & Phổ phân tử (IR/MS)",
+        level: "Vận dụng thấp",
+        type: "short",
+        question: "Catechin là một chất chống oxi hóa mạnh có trong lá trà xanh với công thức phân tử $\\text{C}_{15}\\text{H}_{14}\\text{O}_6$ ($M = 290\\text{ g/mol}$). Khi gắn thêm 1 nhóm $-\\text{OH}$ vào vòng thơm của phân tử Catechin để tạo thành hợp chất Gallocatechin thì phân tử khối ($M$) của hợp chất mới bằng bao nhiêu $\\text{g/mol}$?",
+        correctAnswer: "306",
+        hint: "Khi gắn thêm 1 nhóm $-\\text{OH}$ vào vòng thơm, nhóm $-\\text{OH}$ ($17\\text{ đvC}$) sẽ thế chỗ của 1 nguyên tử $-\\text{H}$ ($1\\text{ đvC}$) trên vòng benzen.",
+        trapNote: "Bẫy cộng trực tiếp $+17\\text{ đvC}$ của nhóm $-\\text{OH}$ thành $290 + 17 = 307$ mà quên trừ đi $1\\text{ nguyên tử H}$ bị thay thế!",
+        explanation: "Quá trình gắn thêm 1 nhóm $-\\text{OH}$ vào vòng thơm của Catechin ($\\text{C}_{15}\\text{H}_{14}\\text{O}_6$) thực chất là thay thế $1\\text{ nguyên tử H}$ ($M=1$) bằng $1\\text{ nhóm }-\\text{OH}$ ($M=17$). Công thức phân tử mới là $\\text{C}_{15}\\text{H}_{14}\\text{O}_7$, độ tăng khối lượng mol là $\\Delta M = 17 - 1 = +16\\text{ g/mol}$. Vậy phân tử khối mới là $M = 290 + 16 = 306\\text{ g/mol}$."
+      },
+      {
+        id: "CHEM_03",
+        subject: "chemistry",
+        topic: "Ester - Lipid & Thủy phân",
+        level: "Vận dụng thấp",
+        type: "short",
+        question: "Thủy phân hoàn toàn $0,2\\text{ mol}$ một triglyceride $\\text{X}$ có công thức phân tử $\\text{C}_{57}\\text{H}_{102}\\text{O}_6$ bằng dung dịch $\\text{NaOH}$ $1,5\\text{ M}$ vừa đủ. Tính thể tích dung dịch $\\text{NaOH}$ cần dùng theo đơn vị $\\text{mL}$.",
+        correctAnswer: "400",
+        hint: "Mỗi phân tử triglyceride $\\text{X}$ có 3 nhóm chức ester ($-\\text{COO}-$), do đó phản ứng với $\\text{NaOH}$ theo tỉ lệ mol $1:3$.",
+        trapNote: "Bẫy quên nhân hệ số 3 của triglyceride hoặc đổi sai đơn vị từ Lít sang mL.",
+        explanation: "Hợp chất triglyceride $\\text{X}$ ($\\text{C}_{57}\\text{H}_{102}\\text{O}_6$) có phân tử khối $M_{\\text{X}} = 57 \\times 12 + 102 \\times 1 + 6 \\times 16 = 882\\text{ g/mol}$. Phương trình thủy phân: $$\\text{C}_{57}\\text{H}_{102}\\text{O}_6 + 3\\text{NaOH} \\xrightarrow{t^\\circ} \\text{C}_3\\text{H}_5(\\text{OH})_3 + 3\\text{Muối}$$ Ta có $n_{\\text{NaOH}} = 3n_{\\text{X}} = 3 \\times 0,2 = 0,6\\text{ mol}$. Thể tích dung dịch $\\text{NaOH}$ $1,5\\text{ M}$ cần dùng là $V = \\frac{0,6}{1,5} = 0,4\\text{ L} = 400\\text{ mL}$."
+      },
+      {
+        id: "CHEM_04",
+        subject: "chemistry",
+        topic: "Hợp chất Hữu cơ & Phổ phân tử (IR/MS)",
+        level: "Nhận biết",
+        type: "mcq",
+        question: "Trên phổ hồng ngoại (IR) của một hợp chất hữu cơ đơn chức $\\text{Y}$, xuất hiện một peak hấp thụ rất mạnh và nhọn tại số sóng $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$ (không có peak rộng ở vùng $2500 - 3600\\text{ cm}^{-1}$). Tín hiệu tại $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$ đặc trưng cho liên kết nào sau đây?",
+        options: [
+          "A. Liên kết đơn $\\text{O-H}$ của alcohol",
+          "B. Liên kết đôi $\\text{C=O}$ của nhóm carbonyl",
+          "C. Liên kết ba $\\text{C}\\equiv\\text{N}$ của nitrile",
+          "D. Liên kết đơn $\\text{C-O}$ của ether"
+        ],
+        correctAnswer: "B",
+        hint: "Vùng số sóng $1680 - 1750\\text{ cm}^{-1}$ với cường độ mạnh và nhọn là dấu vân tay đặc trưng nhất của nhóm chức chứa liên kết đôi với oxygen.",
+        trapNote: "Bẫy nhầm vùng $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$ của $\\text{C=O}$ với vùng $3200 - 3600\\text{ cm}^{-1}$ của nhóm $\\text{O-H}$.",
+        explanation: "Trên phổ hồng ngoại (IR), tín hiệu hấp thụ mạnh và nhọn tại số sóng $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$ ($1680 - 1750\\text{ cm}^{-1}$) đặc trưng cho dao động hóa trị của liên kết đôi $\\text{C=O}$ (nhóm carbonyl trong aldehyde, ketone, ester hoặc carboxylic acid)."
+      },
+      {
+        id: "CHEM_05",
+        subject: "chemistry",
+        topic: "Nhiệt hóa học & Năng lượng",
+        level: "Vận dụng cao",
+        type: "short",
+        question: "Một mẫu xăng sinh học E5 (chứa $5\\%$ thể tích ethanol và $95\\%$ thể tích octane). Biết khối lượng riêng của ethanol ($\\text{C}_2\\text{H}_5\\text{OH}$, $M=46$) là $0,8\\text{ g/mL}$ và của octane ($\\text{C}_8\\text{H}_{18}$, $M=114$) là $0,7\\text{ g/mL}$. Khi đốt cháy hoàn toàn $1\\text{ L}$ ($1000\\text{ mL}$) xăng E5, biết nhiệt đốt cháy chuẩn của ethanol là $1367\\text{ kJ/mol}$ và của octane là $5470\\text{ kJ/mol}$. Tính tổng nhiệt lượng tỏa ra (theo đơn vị $\\text{MJ}$, làm tròn đến hàng phần mười ở kết quả cuối cùng).",
+        correctAnswer: "33.1",
+        hint: "Tính khối lượng của $50\\text{ mL}$ ethanol ($40\\text{ g}$) và $950\\text{ mL}$ octane ($665\\text{ g}$). Giữ nguyên phân số $n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}$ và $n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$ khi nhân với nhiệt đốt cháy.",
+        trapNote: "Bẫy làm tròn sớm số mol trung gian ($n_{\\text{ethanol}} \\approx 0,87$, $n_{\\text{octane}} \\approx 5,83$) dẫn đến sai lệch kết quả cuối!",
+        explanation: "Trong $1000\\text{ mL}$ xăng E5 có $V_{\\text{ethanol}} = 50\\text{ mL} \\Rightarrow m_{\\text{ethanol}} = 50 \\times 0,8 = 40\\text{ g}$ và $V_{\\text{octane}} = 950\\text{ mL} \\Rightarrow m_{\\text{octane}} = 950 \\times 0,7 = 665\\text{ g}$. Giữ nguyên phân số số mol trung gian: $$n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}, \\quad n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$$ Tổng nhiệt lượng tỏa ra: $$Q = \\frac{40}{46} \\times 1367 + \\frac{665}{114} \\times 5470 \\approx 1188,696 + 31908,333 = 33097,03\\text{ kJ} \\approx 33,1\\text{ MJ}$$"
+      },
+      {
+        id: "CHEM_06",
+        subject: "chemistry",
+        topic: "Cân bằng Hóa học & Dung dịch Điện li",
+        level: "Thông hiểu",
+        type: "tf",
+        question: "Xét hệ cân bằng tổng hợp ammonia trong công nghiệp (quy trình Haber-Bosch): $$\\text{N}_2(g) + 3\\text{H}_2(g) \\rightleftharpoons 2\\text{NH}_3(g) \\quad \\Delta_r H^\\circ_{298} = -91,8\\text{ kJ}$$ Hãy xác định tính Đúng / Sai của 4 mệnh đề sau:",
+        statements: [
+          { id: "a", text: "Phản ứng thuận là phản ứng tỏa nhiệt vì $\\Delta_r H^\\circ_{298} < 0$.", isTrue: true },
+          { id: "b", text: "Khi tăng áp suất chung của hệ, cân bằng chuyển dịch theo chiều thuận (chiều làm giảm số mol khí).", isTrue: true },
+          { id: "c", text: "Khi tăng nhiệt độ của bình phản ứng, hiệu suất tổng hợp $\\text{NH}_3$ tại trạng thái cân bằng sẽ tăng lên.", isTrue: false },
+          { id: "d", text: "Chất xúc tác bột sắt ($\\text{Fe}$) làm tăng tốc độ phản ứng thuận và phản ứng nghịch như nhau nhưng không làm dịch chuyển cân bằng.", isTrue: true }
+        ],
+        hint: "Áp dụng nguyên lý chuyển dịch cân bằng Le Chatelier: Khi tăng nhiệt độ, cân bằng chuyển dịch theo chiều thu nhiệt ($\\Delta_r H > 0$).",
+        trapNote: "Bẫy nhầm lẫn rằng đun nóng hoặc thêm xúc tác luôn làm tăng hiệu suất cân bằng của phản ứng tỏa nhiệt.",
+        explanation: "(a) Đúng vì $\\Delta_r H^\\circ_{298} = -91,8\\text{ kJ} < 0$. (b) Đúng vì chiều thuận giảm từ $4\\text{ mol}$ khí xuống $2\\text{ mol}$ khí. (c) Sai vì phản ứng thuận tỏa nhiệt, khi tăng nhiệt độ cân bằng chuyển dịch theo chiều nghịch (thu nhiệt) làm giảm hiệu suất $\\text{NH}_3$. (d) Đúng vì xúc tác chỉ giúp hệ nhanh đạt cân bằng hơn."
+      },
+      {
+        id: "CHEM_07",
+        subject: "chemistry",
+        topic: "Động hóa học & Tốc độ phản ứng",
+        level: "Thông hiểu",
+        type: "mcq",
+        question: "Cho một phản ứng hóa học có hệ số nhiệt độ Van't Hoff $\\gamma = 3$. Khi tăng nhiệt độ của phản ứng từ $20^\\circ\\text{C}$ lên $50^\\circ\\text{C}$, tốc độ của phản ứng tăng lên bao nhiêu lần?",
+        options: [
+          "A. $9\\text{ lần}$",
+          "B. $27\\text{ lần}$",
+          "C. $81\\text{ lần}$",
+          "D. $6\\text{ lần}$"
+        ],
+        correctAnswer: "B",
+        hint: "Sử dụng công thức Van't Hoff: $$\\frac{v_2}{v_1} = \\gamma^{\\frac{T_2 - T_1}{10}}$$",
+        trapNote: "Bẫy lấy $(50 - 20)/10 \\times 3 = 9$ thay vì tính lũy thừa $\\gamma^3 = 3^3 = 27$.",
+        explanation: "Theo quy tắc Van't Hoff: $$\\frac{v_{50}}{v_{20}} = \\gamma^{\\frac{50 - 20}{10}} = 3^3 = 27\\text{ lần}$$"
+      },
+
+      // --- TOÁN HỌC ---
+      {
+        id: "MATH_01",
+        subject: "math",
+        topic: "Hàm số Lượng giác & Phương trình Lượng giác",
+        level: "Thông hiểu",
+        type: "mcq",
+        question: "Số nghiệm thực của phương trình $\\sin\\left(2x - \\frac{\\pi}{4}\\right) = \\frac{\\sqrt{2}}{2}$ trên đoạn $[0; \\pi]$ là bao nhiêu?",
+        options: [
+          "A. $1\\text{ nghiệm}$",
+          "B. $2\\text{ nghiệm}$",
+          "C. $3\\text{ nghiệm}$",
+          "D. $4\\text{ nghiệm}$"
+        ],
+        correctAnswer: "B",
+        hint: "Đưa phương trình về dạng $\\sin\\left(2x - \\frac{\\pi}{4}\\right) = \\sin\\left(\\frac{\\pi}{4}\\right)$ rồi xét hai họ nghiệm $x = \\frac{\\pi}{4} + k\\pi$ và $x = \\frac{\\pi}{2} + k\\pi$.",
+        trapNote: "Bẫy quên chia cho 2 ở chu kỳ $k2\\pi$ (giữ nguyên $k2\\pi$ thay vì $k\\pi$).",
+        explanation: "Ta có: $$\\sin\\left(2x - \\frac{\\pi}{4}\\right) = \\sin\\left(\\frac{\\pi}{4}\\right) \\Leftrightarrow \\begin{bmatrix} 2x - \\frac{\\pi}{4} = \\frac{\\pi}{4} + k2\\pi \\\\ 2x - \\frac{\\pi}{4} = \\frac{3\\pi}{4} + k2\\pi \\end{bmatrix} \\Leftrightarrow \\begin{bmatrix} x = \\frac{\\pi}{4} + k\\pi \\\\ x = \\frac{\\pi}{2} + k\\pi \\end{bmatrix} \\quad (k \\in \\mathbb{Z})$$ Do $x \\in [0; \\pi]$, ta thu được đúng $2$ nghiệm là $x = \\frac{\\pi}{4}$ và $x = \\frac{\\pi}{2}$."
+      },
+      {
+        id: "MATH_02",
+        subject: "math",
+        topic: "Dãy số - Cấp số cộng - Cấp số nhân",
+        level: "Vận dụng thấp",
+        type: "short",
+        question: "Cho cấp số cộng $(u_n)$ có số hạng đầu $u_1 = 5$ và công sai $d = 3$. Tính tổng $S_{20}$ của $20$ số hạng đầu tiên của cấp số cộng này.",
+        correctAnswer: "670",
+        hint: "Áp dụng công thức tổng $n$ số hạng đầu của cấp số cộng: $$S_n = \\frac{n\\left[2u_1 + (n-1)d\\right]}{2}$$",
+        trapNote: "Bẫy dùng nhầm công thức số hạng tổng quát $u_n = u_1 + (n-1)d$ hoặc nhân $(n)$ thay vì $(n-1)$ trong ngoặc.",
+        explanation: "Áp dụng công thức tính tổng $20$ số hạng đầu tiên của cấp số cộng: $$S_{20} = \\frac{20 \\times [2 \\times 5 + (20 - 1) \\times 3]}{2} = 10 \\times (10 + 57) = 670$$"
+      },
+      {
+        id: "MATH_03",
+        subject: "math",
+        topic: "Giới hạn & Hàm số Liên tục",
+        level: "Vận dụng thấp",
+        type: "mcq",
+        question: "Tính giới hạn hữu hạn sau: $$L = \\lim_{x \\to 2} \\frac{\\sqrt{2x + 5} - 3}{x - 2}$$",
+        options: [
+          "A. $L = \\frac{1}{3}$",
+          "B. $L = \\frac{2}{3}$",
+          "C. $L = \\frac{1}{6}$",
+          "D. $L = 1$"
+        ],
+        correctAnswer: "A",
+        hint: "Nhân cả tử và mẫu với biểu thức liên hợp $\\sqrt{2x + 5} + 3$ để khử dạng vô định $\\frac{0}{0}$.",
+        trapNote: "Bẫy quên hệ số $2$ của $2x$ khi nhân liên hợp, dẫn đến kết quả $\\frac{1}{6}$ thay vì $\\frac{2}{6} = \\frac{1}{3}$.",
+        explanation: "Nhân lượng liên hợp: $$L = \\lim_{x \\to 2} \\frac{(2x + 5) - 9}{(x - 2)(\\sqrt{2x + 5} + 3)} = \\lim_{x \\to 2} \\frac{2(x - 2)}{(x - 2)(\\sqrt{2x + 5} + 3)} = \\lim_{x \\to 2} \\frac{2}{\\sqrt{2x + 5} + 3} = \\frac{2}{3 + 3} = \\frac{1}{3}$$"
+      },
+      {
+        id: "MATH_04",
+        subject: "math",
+        topic: "Hàm số Mũ & Lôgarit",
+        level: "Thông hiểu",
+        type: "tf",
+        question: "Cho hai số thực dương $a, b$ thỏa mãn $a \\neq 1$ và $\\log_a b = 3$. Xét tính Đúng / Sai của 4 mệnh đề dưới đây:",
+        statements: [
+          { id: "a", text: "Giá trị của biểu thức $\\log_a(a^2 b)$ bằng $5$.", isTrue: true },
+          { id: "b", text: "Giá trị của biểu thức $\\log_{\\sqrt{a}}(b)$ bằng $\\frac{3}{2}$.", isTrue: false },
+          { id: "c", text: "Giá trị của biểu thức $\\log_a\\left(\\frac{b^2}{a^3}\\right)$ bằng $3$.", isTrue: true },
+          { id: "d", text: "Nếu $a = 2$ thì $b = 8$.", isTrue: true }
+        ],
+        hint: "Chú ý công thức đưa số mũ ở cơ số ra ngoài: $$\\log_{a^\\alpha} b = \\frac{1}{\\alpha} \\log_a b$$",
+        trapNote: "Bẫy mệnh đề (b): Với cơ số $\\sqrt{a} = a^{1/2}$, khi đưa mũ $\\frac{1}{2}$ ra ngoài phải nghịch đảo thành $2 \\log_a b = 6$, không phải $\\frac{3}{2}$.",
+        explanation: "(a) Đúng: $\\log_a(a^2 b) = 2 + \\log_a b = 2 + 3 = 5$. (b) Sai: $\\log_{a^{1/2}} b = 2\\log_a b = 6$. (c) Đúng: $2\\log_a b - 3 = 2(3) - 3 = 3$. (d) Đúng: $\\log_2 b = 3 \\Rightarrow b = 2^3 = 8$."
+      },
+      {
+        id: "MATH_05",
+        subject: "math",
+        topic: "Đạo hàm & Ứng dụng Tối ưu",
+        level: "Vận dụng cao",
+        type: "short",
+        question: "Cho hàm số $f(x) = x^3 - 3x^2 + 4x - 5$. Gọi $M$ là giá trị nhỏ nhất của hệ số góc tiếp tuyến của đồ thị hàm số $y = f(x)$. Tính giá trị của $M$.",
+        correctAnswer: "1",
+        hint: "Hệ số góc tiếp tuyến tại điểm có hoành độ $x_0$ là $k = f'(x_0) = 3x_0^2 - 6x_0 + 4$. Hãy đưa $f'(x_0)$ về dạng bình phương cộng hằng số.",
+        trapNote: "Bẫy lấy hoành độ đỉnh $x_0 = 1$ làm đáp án thay vì thay $x_0 = 1$ vào $f'(x_0)$ để tìm giá trị nhỏ nhất của hệ số góc.",
+        explanation: "Hệ số góc của tiếp tuyến tại điểm có hoành độ $x$ là: $$k = f'(x) = 3x^2 - 6x + 4 = 3(x - 1)^2 + 1 \\ge 1 \\quad \\forall x \\in \\mathbb{R}$$ Dấu bằng xảy ra khi $x = 1$. Vậy giá trị nhỏ nhất của hệ số góc tiếp tuyến là $M = 1$."
+      },
+      {
+        id: "MATH_06",
+        subject: "math",
+        topic: "Xác suất & Tổ hợp",
+        level: "Vận dụng thấp",
+        type: "mcq",
+        question: "Một hộp đựng $5$ viên bi đỏ và $4$ viên bi xanh. Lấy ngẫu nhiên đồng thời $3$ viên bi từ hộp. Xác suất để lấy được ít nhất $2$ viên bi đỏ bằng bao nhiêu?",
+        options: [
+          "A. $\\frac{25}{42}$",
+          "B. $\\frac{5}{14}$",
+          "C. $\\frac{10}{21}$",
+          "D. $\\frac{17}{42}$"
+        ],
+        correctAnswer: "A",
+        hint: "Không gian mẫu $n(\\Omega) = C_9^3 = 84$. Chia 2 trường hợp: (2 đỏ, 1 xanh) hoặc (3 đỏ).",
+        trapNote: "Bẫy chỉ tính trường hợp đúng 2 viên bi đỏ ($C_5^2 C_4^1 = 40$) mà quên cộng trường hợp cả 3 viên bi đều đỏ ($C_5^3 = 10$).",
+        explanation: "Số phần tử không gian mẫu: $n(\\Omega) = C_9^3 = 84$. Biến cố $A$ (ít nhất 2 bi đỏ) gồm: $2$ đỏ + $1$ xanh ($C_5^2 \\cdot C_4^1 = 10 \\times 4 = 40$) và $3$ đỏ ($C_5^3 = 10$). Suy ra $n(A) = 40 + 10 = 50$. Xác suất $P(A) = \\frac{50}{84} = \\frac{25}{42}$."
+      }
+    ];
+
+    // ============================================================================
+    // 5. KHO BẪY KIẾN THỨC MẶC ĐỊNH (MISTAKE VAULT & SPACED REPETITION)
+    // ============================================================================
+    const INITIAL_TRAPS = [
+      {
+        id: "TRAP_CHEM_1",
+        subject: "chemistry",
+        title: "Bẫy số mol electron của FeC₂O₄ trong môi trường H₂SO₄ loãng",
+        topic: "Phản ứng Oxi hóa - Khử & Điện hóa",
+        wrongHabit: "Chỉ tính $\\text{Fe}^{+2} \\rightarrow \\text{Fe}^{+3} + 1\\text{e}$ hoặc quên nhân 2 nguyên tử Carbon trong $\\text{C}_2\\text{O}_4^{2-}$.",
+        correctPrinciple: "Bán phản ứng chuẩn: $2\\text{FeC}_2\\text{O}_4 \\rightarrow 2\\text{Fe}^{3+} + 4\\text{CO}_2 + 6\\text{e}$ (mỗi mol $\\text{FeC}_2\\text{O}_4$ nhường $3\\text{ mol e}$). Với $0,2\\text{ mol}$ $\\text{FeC}_2\\text{O}_4$ thì $n_e = 0,6\\text{ mol}$.",
+        mastery: 65,
+        nextReview: "Hôm nay"
+      },
+      {
+        id: "TRAP_CHEM_2",
+        subject: "chemistry",
+        title: "Bẫy cộng trực tiếp +17 đvC khi gắn nhóm -OH vào vòng thơm Catechin",
+        topic: "Hợp chất Hữu cơ & Phổ phân tử (IR/MS)",
+        wrongHabit: "Cộng trực tiếp $M_{\\text{Catechin}} + 17 = 290 + 17 = 307\\text{ g/mol}$.",
+        correctPrinciple: "Gắn thêm 1 nhóm $-\\text{OH}$ ($17\\text{ đvC}$) vào vòng thơm là thay thế 1 nguyên tử $\\text{H}$ ($1\\text{ đvC}$), nên phân tử khối chỉ tăng $+16\\text{ đvC}$ thành $M = 290 + 16 = 306\\text{ g/mol}$.",
+        mastery: 80,
+        nextReview: "Ngày mai"
+      },
+      {
+        id: "TRAP_CHEM_3",
+        subject: "chemistry",
+        title: "Bẫy làm tròn số mol trung gian trong bài toán Nhiệt đốt cháy Xăng E5",
+        topic: "Nhiệt hóa học & Năng lượng",
+        wrongHabit: "Làm tròn $n_{\\text{ethanol}} = \\frac{40}{46} \\approx 0,87\\text{ mol}$ và $n_{\\text{octane}} = \\frac{665}{114} \\approx 5,83\\text{ mol}$ trước khi nhân nhiệt đốt cháy.",
+        correctPrinciple: "Giữ nguyên phân số trung gian $n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}$ và $n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$, chỉ làm tròn duy nhất ở kết quả cuối cùng ($Q \\approx 33,1\\text{ MJ}$).",
+        mastery: 50,
+        nextReview: "Hôm nay"
+      },
+      {
+        id: "TRAP_MATH_1",
+        subject: "math",
+        title: "Bẫy đưa số mũ ở cơ số Lôgarit ra ngoài không nghịch đảo",
+        topic: "Hàm số Mũ & Lôgarit",
+        wrongHabit: "Viết $\\log_{a^k} b = k \\log_a b$ dẫn đến tính $\\log_{\\sqrt{a}} b = \\frac{1}{2}\\log_a b$.",
+        correctPrinciple: "Công thức chuẩn: $\\log_{a^k} b = \\frac{1}{k}\\log_a b$. Với $\\sqrt{a} = a^{1/2}$ thì $\\log_{\\sqrt{a}} b = 2\\log_a b$.",
+        mastery: 75,
+        nextReview: "2 ngày tới"
+      },
+      {
+        id: "TRAP_MATH_2",
+        subject: "math",
+        title: "Bẫy quên chia chu kỳ k2π khi giải phương trình sin(ax + b) = c",
+        topic: "Hàm số Lượng giác & Phương trình Lượng giác",
+        wrongHabit: "Từ $2x - \\frac{\\pi}{4} = \\frac{\\pi}{4} + k2\\pi$ suy ra $x = \\frac{\\pi}{4} + k2\\pi$ (quên chia 2 cho $k2\\pi$).",
+        correctPrinciple: "Khi chia hai vế cho hệ số $a$, phải chia cả chu kỳ: $x = \\frac{\\pi}{4} + k\\pi$ ($k \\in \\mathbb{Z}$), từ đó đếm đúng số nghiệm trên đoạn.",
+        mastery: 70,
+        nextReview: "Hôm nay"
+      }
+    ];
+
+    // ============================================================================
+    // 6. ĐỀ MẪU TRỢ LÝ AI & BỘ GIẢI NGUYÊN LÝ GỐC TỨC THÌ (FIRST-PRINCIPLES SOLVER)
+    // ============================================================================
+    const SAMPLE_AI_PROBLEMS = [
+      {
+        id: "SAMPLE_1",
+        subject: "chemistry",
+        badge: "Oxi hóa - Khử HSG",
+        title: "Oxi hóa FeC₂O₄ bằng KMnO₄ trong H₂SO₄ loãng",
+        prompt: "Hòa tan hoàn toàn 0,2 mol FeC2O4 trong dung dịch H2SO4 loãng dư, sau đó nhỏ từ từ dung dịch KMnO4 0,5M vào đến khi phản ứng vừa đủ thu được muối Fe2(SO4)3 và khí CO2. Viết bán phản ứng chuẩn, tính số mol electron trao đổi và thể tích dung dịch KMnO4 đã dùng."
+      },
+      {
+        id: "SAMPLE_2",
+        subject: "chemistry",
+        badge: "Hữu cơ & Phổ IR",
+        title: "Catechin gắn nhóm -OH & Thủy phân Triglyceride X",
+        prompt: "1) Catechin (C15H14O6, M = 290 g/mol) khi gắn thêm 1 nhóm -OH vào vòng thơm thì có phân tử khối M bằng bao nhiêu? 2) Thủy phân hoàn toàn 0,2 mol triglyceride X (C57H102O6) bằng dung dịch NaOH 1,5M cần bao nhiêu mL dung dịch NaOH? 3) Peak hấp thụ mạnh và nhọn tại số sóng 1700 cm^-1 trên phổ IR đặc trưng cho liên kết nào?"
+      },
+      {
+        id: "SAMPLE_3",
+        subject: "chemistry",
+        badge: "Nhiệt Hóa Học E5",
+        title: "Nhiệt lượng đốt cháy 1 Lít Xăng sinh học E5 (Không làm tròn trung gian)",
+        prompt: "Đốt cháy hoàn toàn 1 Lít (1000 mL) xăng sinh học E5 (5% thể tích ethanol C2H5OH D=0,8 g/mL, M=46 và 95% thể tích octane C8H18 D=0,7 g/mL, M=114). Biết nhiệt đốt cháy chuẩn của ethanol là 1367 kJ/mol và của octane là 5470 kJ/mol. Tính tổng nhiệt lượng tỏa ra theo kJ và MJ (giữ nguyên phân số số mol trung gian)."
+      },
+      {
+        id: "SAMPLE_4",
+        subject: "math",
+        badge: "Đạo hàm & Cực trị",
+        title: "Tối ưu hóa hệ số góc tiếp tuyến & Phương trình lượng giác",
+        prompt: "Cho hàm số y = f(x) = x^3 - 3x^2 + 4x - 5. Tìm giá trị nhỏ nhất của hệ số góc tiếp tuyến của đồ thị hàm số và viết phương trình tiếp tuyến tại điểm đó."
+      }
+    ];
+
+    function buildLocalFirstPrinciplesSolution(queryText) {
+      const q = queryText.toLowerCase();
+      if (q.includes("fec2o4") || q.includes("kmno4")) {
+        return `**1. Phân tích Nguyên lý gốc (Bảo toàn Electron & Bảo toàn Nguyên tố):**
+- Trong hợp chất sắt(II) oxalate ($\\text{FeC}_2\\text{O}_4$), cả $\\text{Fe}^{+2}$ và $\\text{C}^{+3}$ đều có số oxi hóa trung gian nên khi gặp chất oxi hóa mạnh $\\text{KMnO}_4 / \\text{H}_2\\text{SO}_4$ loãng sẽ bị oxi hóa lên mức cao nhất là $\\text{Fe}^{+3}$ (trong $\\text{Fe}_2(\\text{SO}_4)_3$) và $\\text{C}^{+4}$ (trong $\\text{CO}_2$).
+
+**2. Thiết lập Bán phản ứng chuẩn:**
+- Để tạo ra phân tử muối $\\text{Fe}_2(\\text{SO}_4)_3$ có $2$ nguyên tử $\\text{Fe}$ ở vế phải, bán phản ứng nhường electron chuẩn là:
+$$2\\text{FeC}_2\\text{O}_4 \\rightarrow 2\\text{Fe}^{3+} + 4\\text{CO}_2 + 6\\text{e}$$
+*(Hoặc viết cho 1 phân tử: $\\text{FeC}_2\\text{O}_4 \\rightarrow \\text{Fe}^{3+} + 2\\text{CO}_2 + 3\\text{e}$)*
+- Bán phản ứng nhận electron của $\\text{MnO}_4^-$ trong môi trường acid:
+$$\\text{MnO}_4^- + 8\\text{H}^+ + 5\\text{e} \\rightarrow \\text{Mn}^{2+} + 4\\text{H}_2\\text{O}$$
+
+**3. Tính toán Số mol Electron và Thể tích $\\text{KMnO}_4$:**
+- Với $n_{\\text{FeC}_2\\text{O}_4} = 0,2\\text{ mol}$, số mol electron nhường là:
+$$n_e = 3 \\times n_{\\text{FeC}_2\\text{O}_4} = 3 \\times 0,2 = 0,6\\text{ mol}$$
+- Áp dụng định luật Bảo toàn Electron ($\\sum n_{e\\text{ nhường}} = \\sum n_{e\\text{ nhận}}$):
+$$5 \\times n_{\\text{KMnO}_4} = 0,6 \\Rightarrow n_{\\text{KMnO}_4} = \\frac{0,6}{5} = 0,12\\text{ mol}$$
+- Thể tích dung dịch $\\text{KMnO}_4$ $0,5\\text{ M}$ cần dùng:
+$$V_{\\text{dd KMnO}_4} = \\frac{0,12}{0,5} = 0,24\\text{ L} = 240\\text{ mL}$$`;
+      }
+
+      if (q.includes("catechin") || q.includes("c57h102o6") || q.includes("1700")) {
+        return `**1. Phân tử khối khi gắn thêm 1 nhóm $-\\text{OH}$ vào vòng thơm của Catechin:**
+- Catechin có công thức phân tử $\\text{C}_{15}\\text{H}_{14}\\text{O}_6$ với $M = 290\\text{ g/mol}$.
+- Theo nguyên lý cấu tạo hữu cơ, khi gắn thêm $1$ nhóm $-\\text{OH}$ ($17\\text{ đvC}$) vào vòng thơm, nhóm $-\\text{OH}$ sẽ **thay thế $1$ nguyên tử $\\text{H}$ ($1\\text{ đvC}$)** gắn trên vòng benzen.
+- Độ tăng phân tử khối thực tế là:
+$$\\Delta M = 17 - 1 = +16\\text{ đvC}$$
+- Hợp chất mới có công thức $\\text{C}_{15}\\text{H}_{14}\\text{O}_7$ và phân tử khối chuẩn xác là:
+$$M = 290 + 16 = 306\\text{ g/mol}$$
+
+**2. Thủy phân hoàn toàn $0,2\\text{ mol}$ Triglyceride $\\text{X}$ ($\\text{C}_{57}\\text{H}_{102}\\text{O}_6$):**
+- Phân tử khối của $\\text{X}$: $M_{\\text{X}} = 57 \\times 12 + 102 \\times 1 + 6 \\times 16 = 882\\text{ g/mol}$.
+- Phương trình phản ứng xà phòng hóa:
+$$\\text{C}_{57}\\text{H}_{102}\\text{O}_6 + 3\\text{NaOH} \\xrightarrow{t^\\circ} \\text{C}_3\\text{H}_5(\\text{OH})_3 + 3\\text{Muối}$$
+- Số mol $\\text{NaOH}$ phản ứng vừa đủ:
+$$n_{\\text{NaOH}} = 3n_{\\text{X}} = 3 \\times 0,2 = 0,6\\text{ mol}$$
+- Thể tích dung dịch $\\text{NaOH}$ $1,5\\text{ M}$ cần dùng:
+$$V_{\\text{dd NaOH}} = \\frac{0,6}{1,5} = 0,4\\text{ L} = 400\\text{ mL}$$
+
+**3. Nhận diện tín hiệu Phổ hồng ngoại (IR) tại $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$:**
+- Peak hấp thụ mạnh và nhọn tại $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$ đặc trưng cho dao động hóa trị của **liên kết đôi $\\text{C=O}$ (nhóm carbonyl)**.`;
+      }
+
+      if (q.includes("e5") || q.includes("octane") || q.includes("ethanol")) {
+        return `**1. Xác định thể tích và khối lượng từng cấu tử trong $1000\\text{ mL}$ xăng E5:**
+- Thể tích ethanol ($\\text{C}_2\\text{H}_5\\text{OH}$): $V_{\\text{ethanol}} = 1000 \\times 5\\% = 50\\text{ mL} \\Rightarrow m_{\\text{ethanol}} = 50 \\times 0,8 = 40\\text{ g}$.
+- Thể tích octane ($\\text{C}_8\\text{H}_{18}$): $V_{\\text{octane}} = 1000 \\times 95\\% = 950\\text{ mL} \\Rightarrow m_{\\text{octane}} = 950 \\times 0,7 = 665\\text{ g}$.
+
+**2. Thiết lập số mol dạng phân số nguyên gốc (Tuyệt đối không làm tròn số trung gian):**
+$$n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}, \\qquad n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$$
+
+**3. Tính tổng nhiệt lượng tỏa ra khi đốt cháy $1\\text{ L}$ xăng E5:**
+$$Q = n_{\\text{ethanol}} \\times 1367 + n_{\\text{octane}} \\times 5470 = \\frac{40}{46} \\times 1367 + \\frac{665}{114} \\times 5470$$
+$$Q = \\frac{54680}{46} + \\frac{3637550}{114} \\approx 1188,6957 + 31908,3333 = 33097,029\\text{ kJ} \\approx 33,1\\text{ MJ}$$`;
+      }
+
+      return `**1. Phân tích từ Nguyên lý gốc (First Principles):**
+- Đề bài yêu cầu khảo sát biểu thức: "${queryText}".
+- Với bài toán cực trị hệ số góc tiếp tuyến của $f(x) = x^3 - 3x^2 + 4x - 5$, hệ số góc tại hoành độ tiếp điểm $x_0$ được xác định bởi đạo hàm bậc nhất:
+$$k(x_0) = f'(x_0) = 3x_0^2 - 6x_0 + 4$$
+
+**2. Biến đổi đại số tường minh (Hoàn thành bình phương):**
+$$k(x_0) = 3(x_0^2 - 2x_0 + 1) + 1 = 3(x_0 - 1)^2 + 1$$
+- Do $(x_0 - 1)^2 \\ge 0, \\forall x_0 \\in \\mathbb{R}$, suy ra:
+$$k(x_0) \\ge 1 \\quad \\text{(Đạt giá trị nhỏ nhất } k_{\\min} = 1 \\text{ khi } x_0 = 1\\text{)}$$
+
+**3. Kết luận & Phương trình tiếp tuyến tại điểm uốn $M(1; -3)$:**
+- Tại $x_0 = 1 \\Rightarrow y_0 = f(1) = 1 - 3 + 4 - 5 = -3$.
+- Phương trình tiếp tuyến có hệ số góc nhỏ nhất là:
+$$y = 1(x - 1) - 3 \\Leftrightarrow y = x - 4$$`;
+    }
+
+    // ============================================================================
+    // 7. BIỂU ĐỒ SVG ĐỘNG: RADAR 6 TRỤC & AREA CHART TIẾN ĐỘ
+    // ============================================================================
+    function RadarChartSVG({ axes, accentColor = "#10b981" }) {
+      const size = 290;
+      const center = size / 2;
+      const radius = 98;
+      const levels = [0.25, 0.5, 0.75, 1.0];
+
+      const getPoint = (index, ratio) => {
+        const angle = (Math.PI * 2 * index) / axes.length - Math.PI / 2;
+        const x = center + radius * ratio * Math.cos(angle);
+        const y = center + radius * ratio * Math.sin(angle);
+        return { x, y };
+      };
+
+      const polygonPoints = axes
+        .map((axis, idx) => {
+          const p = getPoint(idx, Math.max(0.08, Math.min(1, axis.value / 100)));
+          return `${p.x},${p.y}`;
+        })
+        .join(" ");
+
+      return (
+        <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-[310px] mx-auto select-none overflow-visible">
+          {levels.map((lvl, idx) => {
+            const pts = axes
+              .map((_, i) => {
+                const p = getPoint(i, lvl);
+                return `${p.x},${p.y}`;
+              })
+              .join(" ");
+            return (
+              <polygon
+                key={idx}
+                points={pts}
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity={0.18}
+                strokeWidth="1"
+              />
+            );
+          })}
+          {axes.map((axis, idx) => {
+            const end = getPoint(idx, 1);
+            const labelPos = getPoint(idx, 1.24);
+            return (
+              <g key={idx}>
+                <line
+                  x1={center}
+                  y1={center}
+                  x2={end.x}
+                  y2={end.y}
+                  stroke="currentColor"
+                  strokeOpacity={0.22}
+                  strokeWidth="1"
+                />
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="fill-current text-[9.5px] font-semibold opacity-85"
+                >
+                  {axis.shortLabel} ({axis.value}%)
+                </text>
+              </g>
+            );
+          })}
+          <polygon
+            points={polygonPoints}
+            fill={accentColor}
+            fillOpacity="0.28"
+            stroke={accentColor}
+            strokeWidth="2.4"
+          />
+          {axes.map((axis, idx) => {
+            const p = getPoint(idx, Math.max(0.08, Math.min(1, axis.value / 100)));
+            return (
+              <circle
+                key={idx}
+                cx={p.x}
+                cy={p.y}
+                r="4"
+                fill={accentColor}
+                stroke="#0f172a"
+                strokeWidth="1.5"
+              />
+            );
+          })}
+        </svg>
+      );
+    }
+
+    function AreaChartSVG({ history, accentColor = "#06b6d4" }) {
+      const width = 520;
+      const height = 190;
+      const padLeft = 36;
+      const padRight = 18;
+      const padTop = 20;
+      const padBottom = 30;
+      const plotW = width - padLeft - padRight;
+      const plotH = height - padTop - padBottom;
+
+      const data = history && history.length > 0
+        ? history.slice(-8)
+        : [
+            { label: "Lần 1", score: 6.8 },
+            { label: "Lần 2", score: 7.4 },
+            { label: "Lần 3", score: 7.9 },
+            { label: "Lần 4", score: 8.5 },
+            { label: "Lần 5", score: 9.2 }
+          ];
+
+      const points = data.map((d, idx) => {
+        const x = padLeft + (data.length === 1 ? plotW / 2 : (idx / (data.length - 1)) * plotW);
+        const y = padTop + plotH - (Math.max(0, Math.min(10, d.score)) / 10) * plotH;
+        return { x, y, ...d };
+      });
+
+      const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+      const areaPath = `${linePath} L ${points[points.length - 1].x} ${padTop + plotH} L ${points[0].x} ${padTop + plotH} Z`;
+
+      return (
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-48 overflow-visible select-none">
+          <defs>
+            <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={accentColor} stopOpacity="0.45" />
+              <stop offset="100%" stopColor={accentColor} stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+          {[0, 2.5, 5, 7.5, 10].map((val, i) => {
+            const y = padTop + plotH - (val / 10) * plotH;
+            return (
+              <g key={i}>
+                <line
+                  x1={padLeft}
+                  y1={y}
+                  x2={width - padRight}
+                  y2={y}
+                  stroke="currentColor"
+                  strokeOpacity="0.12"
+                  strokeDasharray="3 3"
+                />
+                <text x={padLeft - 8} y={y + 3} textAnchor="end" className="fill-current text-[10px] opacity-60">
+                  {val}
+                </text>
+              </g>
+            );
+          })}
+          <path d={areaPath} fill="url(#scoreGrad)" />
+          <path d={linePath} fill="none" stroke={accentColor} strokeWidth="2.8" strokeLinecap="round" />
+          {points.map((p, idx) => (
+            <g key={idx}>
+              <circle cx={p.x} cy={p.y} r="4.5" fill={accentColor} stroke="#0f172a" strokeWidth="1.5" />
+              <text x={p.x} y={p.y - 9} textAnchor="middle" className="fill-current text-[10px] font-bold">
+                {p.score}
+              </text>
+              <text x={p.x} y={height - 8} textAnchor="middle" className="fill-current text-[9.5px] opacity-70">
+                {p.label}
+              </text>
+            </g>
+          ))}
+        </svg>
+      );
+    }
+
+    // ============================================================================
+    // 8. ỨNG DỤNG CHÍNH (CHEMMATH AI MASTER)
+    // ============================================================================
+    function App() {
+      // State giao diện & UI Studio
+      const [activeSubject, setActiveSubject] = useState("chemistry"); // 'chemistry' | 'math'
+      const [activeTab, setActiveTab] = useState("dashboard"); // 7 phân khu
+      const [themeKey, setThemeKey] = useState("emerald"); // 'emerald' | 'cyan' | 'violet' | 'daylight'
+      const [layoutMode, setLayoutMode] = useState("auto"); // 'auto' | 'desktop' | 'mobile' | 'zen'
+      const [fontScale, setFontScale] = useState(1.0); // 0.9 | 1.0 | 1.15 | 1.3
+      const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+      const [uiStudioOpen, setUiStudioOpen] = useState(false);
+      const [isFullscreen, setIsFullscreen] = useState(false);
+
+      // State Người dùng & Gamification
+      const [userProfile, setUserProfile] = useState(() => {
+        const saved = localStorage.getItem("chemmath_user_v2");
+        return saved
+          ? JSON.parse(saved)
+          : {
+              loggedIn: false,
+              name: "Học sinh KHTN",
+              email: APP_CONFIG.DEFAULT_RECEIVER_GMAIL,
+              xp: 2850,
+              streak: 14,
+              rankTitle: "Bậc Thầy Phân Tử",
+              activity7Days: [true, true, true, true, true, true, true]
+            };
+      });
+
+      // Ngân hàng câu hỏi, Kho bẫy & Lịch sử điểm
+      const [questions, setQuestions] = useState(() => {
+        const saved = localStorage.getItem("chemmath_questions_v2");
+        return saved ? JSON.parse(saved) : INITIAL_QUESTIONS;
+      });
+      const [traps, setTraps] = useState(() => {
+        const saved = localStorage.getItem("chemmath_traps_v2");
+        return saved ? JSON.parse(saved) : INITIAL_TRAPS;
+      });
+      const [quizHistory, setQuizHistory] = useState(() => {
+        const saved = localStorage.getItem("chemmath_history_v2");
+        return saved
+          ? JSON.parse(saved)
+          : [
+              { label: "Đề #1", score: 7.5, subject: "chemistry", date: "01/11" },
+              { label: "Đề #2", score: 8.2, subject: "math", date: "02/11" },
+              { label: "Đề #3", score: 8.8, subject: "chemistry", date: "03/11" },
+              { label: "Đề #4", score: 9.4, subject: "chemistry", date: "04/11" }
+            ];
+      });
+
+      // State Thông báo Toast
+      const [toastMsg, setToastMsg] = useState(null);
+      const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(null), 3800);
+      };
+
+      // Đồng bộ font scale lên :root
+      useEffect(() => {
+        document.documentElement.style.setProperty("--app-scale", String(fontScale));
+      }, [fontScale]);
+
+      useEffect(() => {
+        localStorage.setItem("chemmath_user_v2", JSON.stringify(userProfile));
+      }, [userProfile]);
+
+      useEffect(() => {
+        localStorage.setItem("chemmath_questions_v2", JSON.stringify(questions));
+      }, [questions]);
+
+      useEffect(() => {
+        localStorage.setItem("chemmath_traps_v2", JSON.stringify(traps));
+      }, [traps]);
+
+      useEffect(() => {
+        localStorage.setItem("chemmath_history_v2", JSON.stringify(quizHistory));
+      }, [quizHistory]);
+
+      // Bảng chủ đề màu khoa học (4 Themes)
+      const THEMES = {
+        emerald: {
+          name: "Cyber Emerald (Đen Lục Bảo)",
+          bg: "bg-slate-950 text-slate-100",
+          panel: "bg-slate-900/75 border-emerald-500/25 backdrop-blur-xl",
+          accentText: "text-emerald-400",
+          accentBg: "bg-emerald-500 hover:bg-emerald-400 text-slate-950",
+          accentSoft: "bg-emerald-500/15 border-emerald-500/35 text-emerald-300",
+          hex: "#10b981"
+        },
+        cyan: {
+          name: "Quantum Cyan (Xanh Quang Học)",
+          bg: "bg-slate-950 text-slate-100",
+          panel: "bg-slate-900/75 border-cyan-500/25 backdrop-blur-xl",
+          accentText: "text-cyan-400",
+          accentBg: "bg-cyan-500 hover:bg-cyan-400 text-slate-950",
+          accentSoft: "bg-cyan-500/15 border-cyan-500/35 text-cyan-300",
+          hex: "#06b6d4"
+        },
+        violet: {
+          name: "AlcheMind Violet (Tím Phân Tử)",
+          bg: "bg-[#0b0716] text-slate-100",
+          panel: "bg-[#150d2a]/80 border-violet-500/30 backdrop-blur-xl",
+          accentText: "text-violet-400",
+          accentBg: "bg-violet-500 hover:bg-violet-400 text-white",
+          accentSoft: "bg-violet-500/15 border-violet-500/35 text-violet-300",
+          hex: "#8b5cf6"
+        },
+        daylight: {
+          name: "Clean Daylight (Sáng Tinh Khiết)",
+          bg: "bg-slate-100 text-slate-900",
+          panel: "bg-white/90 border-slate-300 shadow-sm backdrop-blur-xl",
+          accentText: "text-teal-700",
+          accentBg: "bg-teal-600 hover:bg-teal-500 text-white",
+          accentSoft: "bg-teal-600/10 border-teal-600/30 text-teal-800",
+          hex: "#0d9488"
+        }
+      };
+      const currentTheme = THEMES[themeKey] || THEMES.emerald;
+
+      // Toggle Toàn màn hình
+      const handleFullscreenToggle = () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen?.().then(() => setIsFullscreen(true)).catch(() => {});
+        } else {
+          document.exitFullscreen?.().then(() => setIsFullscreen(false)).catch(() => {});
+        }
+      };
+
+      // Đăng nhập Google (Sử dụng ngầm APP_CONFIG.GOOGLE_OAUTH_CLIENT_ID / Supabase)
+      const handleGoogleLogin = async () => {
+        if (userProfile.loggedIn) {
+          setUserProfile((prev) => ({ ...prev, loggedIn: false, name: "Học sinh KHTN" }));
+          showToast("Đã đăng xuất khỏi phiên Google.");
+          return;
+        }
+        try {
+          if (
+            window.supabase &&
+            APP_CONFIG.SUPABASE_URL.startsWith("http") &&
+            !APP_CONFIG.SUPABASE_ANON_KEY.includes("ĐIỀN_")
+          ) {
+            const sb = window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
+            await sb.auth.signInWithOAuth({ provider: "google" });
+          }
+        } catch (err) {}
+        setUserProfile((prev) => ({
+          ...prev,
+          loggedIn: true,
+          name: APP_CONFIG.AUTHOR_INFO.authorName !== "Tên Tác Giả" ? APP_CONFIG.AUTHOR_INFO.authorName : "Học sinh Google KHTN",
+          email: APP_CONFIG.AUTHOR_INFO.supportEmail,
+          xp: prev.xp + 50
+        }));
+        showToast("Đã kết nối tài khoản Google & đồng bộ hồ sơ học tập (+50 XP)!");
+      };
+
+      // Gửi báo cáo Gmail & Đồng bộ Google Sheets ngầm qua APP_CONFIG
+      const handleSendGmailReport = async () => {
+        const avg = (
+          quizHistory.reduce((acc, item) => acc + Number(item.score || 0), 0) /
+          Math.max(1, quizHistory.length)
+        ).toFixed(2);
+
+        const payload = {
+          receiver: APP_CONFIG.DEFAULT_RECEIVER_GMAIL,
+          studentName: userProfile.name,
+          xp: userProfile.xp,
+          streak: userProfile.streak,
+          avgScore: avg,
+          timestamp: new Date().toISOString()
+        };
+
+        if (
+          APP_CONFIG.GMAIL_REPORT_WEBHOOK_URL &&
+          !APP_CONFIG.GMAIL_REPORT_WEBHOOK_URL.includes("...")
+        ) {
+          try {
+            await fetch(APP_CONFIG.GMAIL_REPORT_WEBHOOK_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            });
+            showToast(`Đã gửi báo cáo kết quả học tập tới ${APP_CONFIG.DEFAULT_RECEIVER_GMAIL}!`);
+            return;
+          } catch (e) {}
+        }
+        showToast(`Đã tạo bản tổng hợp kết quả học tập (Điểm TB: ${avg}/10) gửi tới ${APP_CONFIG.DEFAULT_RECEIVER_GMAIL}!`);
+      };
+
+      const handleCloudBackup = async () => {
+        const backupData = {
+          configProject: APP_CONFIG.AUTHOR_INFO.projectName,
+          userProfile,
+          quizHistory,
+          trapsCount: traps.length,
+          questionsCount: questions.length,
+          exportedAt: new Date().toLocaleString("vi-VN")
+        };
+        if (
+          APP_CONFIG.GOOGLE_SHEETS_SYNC_WEBHOOK_URL &&
+          !APP_CONFIG.GOOGLE_SHEETS_SYNC_WEBHOOK_URL.includes("...")
+        ) {
+          try {
+            await fetch(APP_CONFIG.GOOGLE_SHEETS_SYNC_WEBHOOK_URL, {
+              method: "POST",
+              mode: "no-cors",
+              body: JSON.stringify(backupData)
+            });
+          } catch (e) {}
+        }
+        const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ChemMath_Backup_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("Đã đồng bộ Cloud & tải tệp sao lưu dữ liệu học tập!");
+      };
+
+      // ========================================================================
+      // STATE PHÒNG KIỂM TRA & LUYỆN TẬP (QUIZ ARENA)
+      // ========================================================================
+      const [quizFilterTopic, setQuizFilterTopic] = useState("ALL");
+      const [quizFilterLevel, setQuizFilterLevel] = useState("ALL");
+      const [quizCount, setQuizCount] = useState(10);
+      const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
+      const [userAnswers, setUserAnswers] = useState({});
+      const [revealedHints, setRevealedHints] = useState({});
+      const [quizSubmitted, setQuizSubmitted] = useState(false);
+      const [mobilePaletteOpen, setMobilePaletteOpen] = useState(false);
+
+      const subjectTopics = useMemo(() => {
+        const list = questions
+          .filter((q) => q.subject === activeSubject)
+          .map((q) => q.topic);
+        return ["ALL", ...Array.from(new Set(list))];
+      }, [questions, activeSubject]);
+
+      const filteredQuizQuestions = useMemo(() => {
+        let pool = questions.filter((q) => q.subject === activeSubject);
+        if (quizFilterTopic !== "ALL") {
+          pool = pool.filter((q) => q.topic === quizFilterTopic);
+        }
+        if (quizFilterLevel !== "ALL") {
+          pool = pool.filter((q) => q.level === quizFilterLevel);
+        }
+        return pool.slice(0, quizCount);
+      }, [questions, activeSubject, quizFilterTopic, quizFilterLevel, quizCount]);
+
+      const isQuestionCorrect = (q, ans) => {
+        if (!ans) return false;
+        if (q.type === "mcq") {
+          return ans === q.correctAnswer;
+        }
+        if (q.type === "short") {
+          const normUser = String(ans).trim().replace(",", ".");
+          const normTrue = String(q.correctAnswer).trim().replace(",", ".");
+          return normUser === normTrue;
+        }
+        if (q.type === "tf") {
+          return q.statements.every((st) => ans[st.id] === st.isTrue);
+        }
+        return false;
+      };
+
+      const handleSubmitQuiz = () => {
+        if (filteredQuizQuestions.length === 0) return;
+        let correctCount = 0;
+        const newlyTrapped = [];
+
+        filteredQuizQuestions.forEach((q) => {
+          const ok = isQuestionCorrect(q, userAnswers[q.id]);
+          if (ok) {
+            correctCount += 1;
+          } else {
+            newlyTrapped.push({
+              id: `TRAP_AUTO_${q.id}`,
+              subject: q.subject,
+              title: `Bẫy câu hỏi: ${q.topic}`,
+              topic: q.topic,
+              wrongHabit: q.trapNote || "Nhầm lẫn bước biến đổi hoặc hệ số cân bằng.",
+              correctPrinciple: q.explanation,
+              mastery: 35,
+              nextReview: "Hôm nay"
+            });
+          }
+        });
+
+        const score10 = Number(((correctCount / filteredQuizQuestions.length) * 10).toFixed(1));
+        setQuizSubmitted(true);
+        setQuizHistory((prev) => [
+          ...prev,
+          {
+            label: `Đề #${prev.length + 1}`,
+            score: score10,
+            subject: activeSubject,
+            date: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
+          }
+        ]);
+
+        if (newlyTrapped.length > 0) {
+          setTraps((prev) => {
+            const existingIds = new Set(prev.map((t) => t.id));
+            const uniqueNew = newlyTrapped.filter((t) => !existingIds.has(t.id));
+            return [...uniqueNew, ...prev];
+          });
+        }
+
+        setUserProfile((prev) => ({
+          ...prev,
+          xp: prev.xp + correctCount * 30 + 20
+        }));
+        showToast(`Đã chấm bài! Điểm số: ${score10}/10 (+${correctCount * 30 + 20} XP)`);
+      };
+
+      const handleResetQuiz = () => {
+        setUserAnswers({});
+        setRevealedHints({});
+        setQuizSubmitted(false);
+        setCurrentQuestionIdx(0);
+      };
+
+      // ========================================================================
+      // STATE TRỢ LÝ AI GIẢI BÀI TẬP & QUÉT ĐỀ (GEMINI FIRST-PRINCIPLES)
+      // ========================================================================
+      const [aiPrompt, setAiPrompt] = useState(SAMPLE_AI_PROBLEMS[0].prompt);
+      const [aiImageBase64, setAiImageBase64] = useState(null);
+      const [aiImageMime, setAiImageMime] = useState("image/jpeg");
+      const [aiLoading, setAiLoading] = useState(false);
+      const [aiSolution, setAiSolution] = useState(() =>
+        buildLocalFirstPrinciplesSolution(SAMPLE_AI_PROBLEMS[0].prompt)
+      );
+
+      const handleImageUpload = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setAiImageMime(file.type || "image/jpeg");
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAiImageBase64(reader.result);
+          showToast("Đã nạp ảnh đề bài vào bộ quét OCR Khoa học!");
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const handleSolveWithGemini = async () => {
+        if (!aiPrompt.trim() && !aiImageBase64) {
+          showToast("Vui lòng nhập đề bài hoặc tải ảnh chụp đề bài!");
+          return;
+        }
+        setAiLoading(true);
+        const apiKey = (APP_CONFIG.GEMINI_API_KEY || "").trim();
+
+        // Nếu Developer đã điền GEMINI_API_KEY thật trong APP_CONFIG, gọi trực tiếp Gemini API
+        if (apiKey && !apiKey.includes("ĐIỀN_") && apiKey.length > 15) {
+          try {
+            const parts = [{ text: aiPrompt || "Hãy đọc đề bài trong ảnh và giải chi tiết từng bước từ nguyên lý gốc." }];
+            if (aiImageBase64) {
+              const base64Clean = aiImageBase64.split(",")[1];
+              parts.push({
+                inlineData: {
+                  mimeType: aiImageMime,
+                  data: base64Clean
+                }
+              });
+            }
+
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${APP_CONFIG.GEMINI_MODEL}:generateContent?key=${apiKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  systemInstruction: {
+                    parts: [{ text: GEMINI_SYSTEM_INSTRUCTION }]
+                  },
+                  contents: [{ role: "user", parts }],
+                  generationConfig: {
+                    temperature: 0.15
+                  }
+                })
+              }
+            );
+            const data = await response.json();
+            const replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (replyText) {
+              setAiSolution(replyText);
+              setAiLoading(false);
+              setUserProfile((prev) => ({ ...prev, xp: prev.xp + 25 }));
+              return;
+            }
+          } catch (error) {
+            // Chuyển mượt mà sang bộ giải First-Principles nội bộ nếu ngoại tuyến
+          }
+        }
+
+        setTimeout(() => {
+          setAiSolution(buildLocalFirstPrinciplesSolution(aiPrompt));
+          setAiLoading(false);
+          setUserProfile((prev) => ({ ...prev, xp: prev.xp + 20 }));
+        }, 450);
+      };
+
+      // ========================================================================
+      // STATE SỔ TAY TRA CỨU TƯƠNG TÁC (MÁY MÔ PHỎNG PHỔ IR 1500 - 3600 cm^-1)
+      // ========================================================================
+      const [irWaveNumber, setIrWaveNumber] = useState(1700);
+      const irAnalysis = useMemo(() => {
+        const v = Number(irWaveNumber);
+        if (v >= 1680 && v <= 1750) {
+          return {
+            bond: "Liên kết đôi C=O (Carbonyl)",
+            compound: "Aldehyde, Ketone, Ester, Carboxylic acid",
+            shape: "Peak hấp thụ RẤT MẠNH và NHỌN (Đặc trưng tại ~1700 cm⁻¹)",
+            formula: "$\\tilde{\\nu}(\\text{C=O}) \\approx 1700\\text{ cm}^{-1}$",
+            transmittance: 12
+          };
+        }
+        if (v >= 3200 && v <= 3600) {
+          return {
+            bond: "Liên kết đơn O-H (Alcohol / Phenol)",
+            compound: "Alcohol, Phenol (liên kết hydrogen liên phân tử)",
+            shape: "Peak hấp thụ MẠNH và TÙ RỘNG",
+            formula: "$\\tilde{\\nu}(\\text{O-H}) \\in [3200; 3600]\\text{ cm}^{-1}$",
+            transmittance: 22
+          };
+        }
+        if (v >= 2500 && v <= 3199) {
+          return {
+            bond: "Liên kết O-H (Carboxylic acid) & C-H",
+            compound: "Carboxylic acid (-COOH) chồng lấp C-H no",
+            shape: "Peak RẤT RỘNG và ĐẶC TRƯNG kéo dài",
+            formula: "$\\tilde{\\nu}(\\text{O-H acid}) \\in [2500; 3300]\\text{ cm}^{-1}$",
+            transmittance: 28
+          };
+        }
+        if (v >= 2100 && v <= 2260) {
+          return {
+            bond: "Liên kết ba C≡C hoặc C≡N",
+            compound: "Alkyne hoặc Nitrile",
+            shape: "Peak trung bình và nhọn",
+            formula: "$\\tilde{\\nu}(\\text{C}\\equiv\\text{N}) \\approx 2220 - 2260\\text{ cm}^{-1}$",
+            transmittance: 45
+          };
+        }
+        if (v >= 1580 && v <= 1679) {
+          return {
+            bond: "Liên kết đôi C=C (Alkene / Vòng thơm)",
+            compound: "Alkene, Arene",
+            shape: "Peak trung bình - nhọn",
+            formula: "$\\tilde{\\nu}(\\text{C=C}) \\in [1600; 1675]\\text{ cm}^{-1}$",
+            transmittance: 52
+          };
+        }
+        return {
+          bond: "Vùng nền / Dao động khung phân tử",
+          compound: "Không có mũi hấp thụ nhóm chức chính tại vị trí này",
+          shape: "Đường nền truyền qua cao (~92% Transmittance)",
+          formula: `$\\tilde{\\nu} = ${v}\\text{ cm}^{-1}$`,
+          transmittance: 92
+        };
+      }, [irWaveNumber]);
+
+      // ========================================================================
+      // STATE TRUNG TÂM NẠP TÀI LIỆU AI & TẠO CÂU HỎI
+      // ========================================================================
+      const [rawDocText, setRawDocText] = useState(
+        `Câu 1: Thủy phân hoàn toàn 0,2 mol triglyceride X (C57H102O6, M = 882 g/mol) bằng dung dịch NaOH 1,5M vừa đủ. Thể tích dung dịch NaOH cần dùng là:\nA. 200 mL\nB. 300 mL\nC. 400 mL\nD. 600 mL\nĐáp án: C`
+      );
+      const [newQForm, setNewQForm] = useState({
+        subject: "chemistry",
+        topic: "Hợp chất Hữu cơ & Phổ phân tử (IR/MS)",
+        level: "Vận dụng thấp",
+        type: "mcq",
+        question: "Khi gắn thêm 1 nhóm $-\\text{OH}$ vào vòng thơm của Catechin ($\\text{C}_{15}\\text{H}_{14}\\text{O}_6$, $M = 290\\text{ g/mol}$) thì phân tử khối mới bằng bao nhiêu?",
+        optionA: "A. $306\\text{ g/mol}$",
+        optionB: "B. $307\\text{ g/mol}$",
+        optionC: "C. $290\\text{ g/mol}$",
+        optionD: "D. $308\\text{ g/mol}$",
+        correctAnswer: "A",
+        explanation: "Thay thế 1 nguyên tử $\\text{H}$ ($1\\text{ đvC}$) bằng nhóm $-\\text{OH}$ ($17\\text{ đvC}$) nên phân tử khối tăng $+16\\text{ đvC}$ thành $M = 306\\text{ g/mol}$."
+      });
+
+      const handleAutoParseDoc = () => {
+        if (!rawDocText.trim()) return;
+        const blocks = rawDocText.split(/(?=Câu\s+\d+[:.])/i).filter((b) => b.trim());
+        const imported = blocks.map((block, idx) => {
+          const lines = block.split("\n").map((l) => l.trim()).filter(Boolean);
+          const qLine = lines[0]?.replace(/^Câu\s+\d+[:.]\s*/i, "") || "Câu hỏi mới";
+          const optA = lines.find((l) => /^A[.:]/i.test(l)) || "A. Phương án A";
+          const optB = lines.find((l) => /^B[.:]/i.test(l)) || "B. Phương án B";
+          const optC = lines.find((l) => /^C[.:]/i.test(l)) || "C. Phương án C";
+          const optD = lines.find((l) => /^D[.:]/i.test(l)) || "D. Phương án D";
+          const ansMatch = block.match(/Đáp án\s*[:=]\s*([A-D])/i);
+          return {
+            id: `IMP_${Date.now()}_${idx}`,
+            subject: activeSubject,
+            topic: activeSubject === "chemistry" ? "Chuyên đề Tổng hợp Hóa học" : "Chuyên đề Tổng hợp Toán học",
+            level: "Vận dụng thấp",
+            type: "mcq",
+            question: qLine,
+            options: [optA, optB, optC, optD],
+            correctAnswer: ansMatch ? ansMatch[1].toUpperCase() : "A",
+            hint: "Phân tích kỹ dữ kiện gốc và bảo toàn số mol.",
+            trapNote: "Cẩn thận đơn vị và hệ số phản ứng.",
+            explanation: "Câu hỏi được bóc tách tự động từ Trung tâm Nạp Tài Liệu AI."
+          };
+        });
+
+        setQuestions((prev) => [...imported, ...prev]);
+        showToast(`Đã bóc tách và lưu ${imported.length} câu hỏi chuẩn LaTeX vào Ngân hàng đề!`);
+      };
+
+      const handleSaveManualQuestion = (e) => {
+        e.preventDefault();
+        const created = {
+          id: `MANUAL_${Date.now()}`,
+          subject: newQForm.subject,
+          topic: newQForm.topic,
+          level: newQForm.level,
+          type: newQForm.type,
+          question: newQForm.question,
+          options: [newQForm.optionA, newQForm.optionB, newQForm.optionC, newQForm.optionD],
+          correctAnswer: newQForm.correctAnswer,
+          hint: "Áp dụng công thức gốc và kiểm tra đơn vị.",
+          trapNote: "Tránh làm tròn số trung gian.",
+          explanation: newQForm.explanation
+        };
+        setQuestions((prev) => [created, ...prev]);
+        showToast("Đã thêm câu hỏi mới vào Ngân hàng câu hỏi!");
+      };
+
+      // Danh mục 7 Phân khu Chức năng Cốt lõi
+      const NAV_ITEMS = [
+        { id: "dashboard", icon: "fa-house-laptop", label: "Trang chủ Bento", short: "Trang chủ" },
+        { id: "quiz", icon: "fa-pen-ruler", label: "Phòng Thi Đa Định Dạng", short: "Phòng thi" },
+        { id: "ai_solver", icon: "fa-robot", label: "Trợ lý AI Giải Bài & OCR", short: "Giải AI" },
+        { id: "mistake_vault", icon: "fa-shield-virus", label: "Kho Bẫy & Lỗi Sai", short: "Kho Bẫy" },
+        { id: "handbook", icon: "fa-book-atlas", label: "Sổ Tay & Phổ IR Tương Tác", short: "Sổ tay" },
+        { id: "importer", icon: "fa-file-import", label: "Nạp Đề AI & Tạo Câu Hỏi", short: "Nạp đề" },
+        { id: "analytics", icon: "fa-chart-pie", label: "Radar 6 Trục & Xếp Hạng", short: "Xếp hạng" }
+      ];
+
+      // Dữ liệu 6 trục Radar theo môn
+      const radarAxesData = useMemo(() => {
+        if (activeSubject === "chemistry") {
+          return [
+            { shortLabel: "Oxi hóa-Khử", value: 92 },
+            { shortLabel: "Ester-Lipid", value: 88 },
+            { shortLabel: "Phổ IR/MS", value: 95 },
+            { shortLabel: "Nhiệt hóa học", value: 84 },
+            { shortLabel: "Cân bằng ĐL", value: 86 },
+            { shortLabel: "Động hóa học", value: 89 }
+          ];
+        }
+        return [
+          { shortLabel: "Lượng giác", value: 90 },
+          { shortLabel: "CSC & CSN", value: 94 },
+          { shortLabel: "Giới hạn", value: 87 },
+          { shortLabel: "Mũ-Lôgarit", value: 89 },
+          { shortLabel: "Đạo hàm", value: 93 },
+          { shortLabel: "Xác suất", value: 85 }
+        ];
+      }, [activeSubject]);
+
+      const avgScore10 = useMemo(() => {
+        if (quizHistory.length === 0) return "8.5";
+        const sum = quizHistory.reduce((acc, item) => acc + Number(item.score || 0), 0);
+        return (sum / quizHistory.length).toFixed(1);
+      }, [quizHistory]);
+
+      const trapMasteryAvg = useMemo(() => {
+        if (traps.length === 0) return 85;
+        const sum = traps.reduce((acc, t) => acc + Number(t.mastery || 0), 0);
+        return Math.round(sum / traps.length);
+      }, [traps]);
+
+      // Xác định khung hiển thị theo Layout Mode
+      const isForcedMobile = layoutMode === "mobile";
+      const isZenMode = layoutMode === "zen";
+
+      return (
+        <div
+          className={`w-screen h-[100dvh] overflow-hidden flex flex-col md:flex-row ${currentTheme.bg} transition-colors duration-300`}
+        >
+          {/* TOAST NOTIFICATION */}
+          {toastMsg && (
+            <div className="fixed top-4 right-4 z-50 max-w-md px-4 py-3 rounded-2xl bg-emerald-500 text-slate-950 font-semibold shadow-2xl flex items-center gap-3 animate-bounce">
+              <i className="fa-solid fa-circle-check text-lg"></i>
+              <span className="text-sm break-words">{toastMsg}</span>
+            </div>
+          )}
+
+          {/* SIDEBAR BÊN TRÁI (ẨN KHI ZEN MODE HOẶC CHẾ ĐỘ MOBILE COMPACT) */}
+          {!isZenMode && !isForcedMobile && (
+            <aside
+              className={`hidden md:flex flex-col justify-between border-r ${currentTheme.panel} transition-all duration-300 ${
+                sidebarCollapsed ? "w-20" : "w-72"
+              } shrink-0 h-full z-20`}
+            >
+              <div className="p-4 space-y-4 overflow-y-auto">
+                {/* Logo & Thu gọn */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-extrabold text-lg shadow-lg ${currentTheme.accentBg}`}>
+                      <i className="fa-solid fa-atom"></i>
+                    </div>
+                    {!sidebarCollapsed && (
+                      <div className="min-w-0">
+                        <h1 className="font-extrabold text-base tracking-tight truncate">ChemMath AI</h1>
+                        <p className="text-[11px] opacity-70 truncate">First-Principles EdTech</p>
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    title="Thu gọn / Mở rộng thanh bên"
+                    className="w-8 h-8 rounded-xl border border-slate-700/60 flex items-center justify-center hover:bg-slate-800/50"
+                  >
+                    <i className={`fa-solid ${sidebarCollapsed ? "fa-angles-right" : "fa-angles-left"} text-xs`}></i>
+                  </button>
+                </div>
+
+                {/* Bộ chuyển Phân hệ Môn học trên Sidebar */}
+                <div className={`grid ${sidebarCollapsed ? "grid-cols-1" : "grid-cols-2"} gap-1.5 p-1.5 rounded-2xl bg-slate-950/50 border border-slate-800/80`}>
+                  <button
+                    onClick={() => {
+                      setActiveSubject("chemistry");
+                      setQuizFilterTopic("ALL");
+                    }}
+                    className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                      activeSubject === "chemistry" ? currentTheme.accentBg : "opacity-75 hover:opacity-100"
+                    }`}
+                  >
+                    <span>🧪</span>
+                    {!sidebarCollapsed && <span>Hóa Học</span>}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveSubject("math");
+                      setQuizFilterTopic("ALL");
+                    }}
+                    className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                      activeSubject === "math" ? currentTheme.accentBg : "opacity-75 hover:opacity-100"
+                    }`}
+                  >
+                    <span>📐</span>
+                    {!sidebarCollapsed && <span>Toán Học</span>}
+                  </button>
+                </div>
+
+                {/* 7 Phân khu chức năng */}
+                <nav className="space-y-1.5">
+                  {NAV_ITEMS.map((item) => {
+                    const active = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl font-semibold text-sm transition-all ${
+                          active
+                            ? `${currentTheme.accentBg} shadow-lg`
+                            : "hover:bg-slate-800/40 opacity-85 hover:opacity-100"
+                        }`}
+                      >
+                        <i className={`fa-solid ${item.icon} text-base w-5 text-center`}></i>
+                        {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+
+              {/* Trạng thái Gamification đáy Sidebar */}
+              {!sidebarCollapsed && (
+                <div className="p-4 border-t border-slate-800/60 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="opacity-75">🔥 Chuỗi học:</span>
+                    <span className="font-bold text-amber-400">{userProfile.streak} ngày</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="opacity-75">⚡ Cấp bậc XP:</span>
+                    <span className={`font-bold ${currentTheme.accentText}`}>{userProfile.xp} XP</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="opacity-75">🏆 Hạng:</span>
+                    <span className="font-bold">{userProfile.rankTitle}</span>
+                  </div>
+                </div>
+              )}
+            </aside>
+          )}
+
+          {/* KHÔNG GIAN LÀM VIỆC CHÍNH (MAIN WORKSPACE) */}
+          <div
+            className={`flex-1 flex flex-col h-full min-w-0 overflow-hidden ${
+              isForcedMobile ? "max-w-[430px] mx-auto border-x border-slate-800 shadow-2xl" : ""
+            }`}
+          >
+            {/* THANH HEADER KHOA HỌC & BẢNG UI STUDIO */}
+            <header className={`border-b ${currentTheme.panel} px-3 md:px-6 py-2.5 shrink-0 z-30`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                {/* Nút chuyển đổi độc lập Hóa học / Toán học trên Header */}
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-2xl p-1 bg-slate-950/60 border border-slate-800">
+                    <button
+                      onClick={() => {
+                        setActiveSubject("chemistry");
+                        setQuizFilterTopic("ALL");
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                        activeSubject === "chemistry" ? currentTheme.accentBg : "opacity-75 hover:opacity-100"
+                      }`}
+                    >
+                      <span>🧪 Phân hệ Môn Hóa Học</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveSubject("math");
+                        setQuizFilterTopic("ALL");
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                        activeSubject === "math" ? currentTheme.accentBg : "opacity-75 hover:opacity-100"
+                      }`}
+                    >
+                      <span>📐 Phân hệ Môn Toán Học</span>
+                    </button>
+                  </div>
+
+                  {isZenMode && (
+                    <button
+                      onClick={() => setLayoutMode("auto")}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold"
+                    >
+                      Thoát Zen Mode
+                    </button>
+                  )}
+                </div>
+
+                {/* Các huy hiệu Streak, XP, Rank, Đăng nhập Google & UI Studio */}
+                <div className="flex items-center flex-wrap gap-2">
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/50 border border-slate-800 text-xs font-semibold">
+                    <span title="Chuỗi ngày học liên tiếp">🔥 {userProfile.streak} ngày</span>
+                    <span className="opacity-30">|</span>
+                    <span title="Điểm kinh nghiệm" className={currentTheme.accentText}>⚡ {userProfile.xp} XP</span>
+                    <span className="opacity-30">|</span>
+                    <span title="Hạng hiện tại" className="text-amber-300">🏆 {userProfile.rankTitle}</span>
+                  </div>
+
+                  {/* Nút Phóng Toàn Màn Hình 1 chạm */}
+                  <button
+                    onClick={handleFullscreenToggle}
+                    title="Phóng Toàn Màn Hình (Fullscreen Toggle)"
+                    className="px-3 py-1.5 rounded-xl border border-slate-700/70 hover:bg-slate-800/50 text-xs font-semibold flex items-center gap-1.5"
+                  >
+                    <i className={`fa-solid ${isFullscreen ? "fa-compress" : "fa-expand"}`}></i>
+                    <span className="hidden lg:inline">{isFullscreen ? "Thu nhỏ" : "Toàn màn hình"}</span>
+                  </button>
+
+                  {/* Nút mở Bảng Tùy chỉnh Giao diện & Toàn màn hình (UI Studio) */}
+                  <button
+                    onClick={() => setUiStudioOpen(!uiStudioOpen)}
+                    className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${currentTheme.accentSoft}`}
+                  >
+                    <span>🎛️ UI Studio</span>
+                    <i className={`fa-solid fa-chevron-${uiStudioOpen ? "up" : "down"} text-[10px]`}></i>
+                  </button>
+
+                  {/* Nút Đăng nhập Google */}
+                  <button
+                    onClick={handleGoogleLogin}
+                    className="px-3.5 py-1.5 rounded-xl bg-white text-slate-900 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 shadow"
+                  >
+                    <i className="fa-brands fa-google text-red-500"></i>
+                    <span>{userProfile.loggedIn ? userProfile.name : "🌐 Đăng nhập Google"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* BẢNG "🎛️ TÙY CHỈNH GIAO DIỆN & TOÀN MÀN HÌNH (UI STUDIO)" */}
+              {uiStudioOpen && (
+                <div className="mt-3 p-4 rounded-2xl bg-slate-950/90 text-slate-100 border border-slate-700/80 shadow-2xl grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  {/* 1. Chế độ Hiển thị (Layout Mode) */}
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-slate-300 flex items-center justify-between">
+                      <span>🖥️ Chế độ Hiển thị (Layout Mode)</span>
+                      <button
+                        onClick={handleFullscreenToggle}
+                        className="text-emerald-400 underline font-semibold"
+                      >
+                        {isFullscreen ? "Thoát Fullscreen" : "Bật Fullscreen"}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {[
+                        { id: "auto", label: "🔄 Tự động (Auto)" },
+                        { id: "desktop", label: "💻 Máy tính (Widescreen)" },
+                        { id: "mobile", label: "📱 Điện thoại (Compact)" },
+                        { id: "zen", label: "🎯 Tập trung (Zen Mode)" }
+                      ].map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => setLayoutMode(m.id)}
+                          className={`p-2 rounded-xl border text-left font-semibold transition-all ${
+                            layoutMode === m.id
+                              ? "bg-emerald-500 text-slate-950 border-emerald-400"
+                              : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                          }`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2. Chủ đề Màu Khoa học (4 Themes) */}
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-slate-300">🎨 Chủ đề Màu Khoa học (4 Themes)</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {Object.entries(THEMES).map(([k, t]) => (
+                        <button
+                          key={k}
+                          onClick={() => setThemeKey(k)}
+                          className={`p-2 rounded-xl border text-left font-semibold truncate transition-all ${
+                            themeKey === k
+                              ? "bg-cyan-500 text-slate-950 border-cyan-300"
+                              : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                          }`}
+                        >
+                          {t.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 3. Cỡ chữ & Tỷ lệ Công thức */}
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-slate-300">🔠 Cỡ chữ & Tỷ lệ Công thức KaTeX</div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { val: 0.9, label: "90%" },
+                        { val: 1.0, label: "100%" },
+                        { val: 1.15, label: "115%" },
+                        { val: 1.3, label: "130%" }
+                      ].map((s) => (
+                        <button
+                          key={s.label}
+                          onClick={() => setFontScale(s.val)}
+                          className={`py-2.5 rounded-xl border font-bold text-center transition-all ${
+                            fontScale === s.val
+                              ? "bg-violet-500 text-white border-violet-300"
+                              : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] opacity-70 pt-1">
+                      Tự động thu phóng toàn bộ văn bản và ký hiệu toán/hóa học ngay lập tức.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </header>
+
+            {/* NỘI DUNG CUỘN CHÍNH (7 PHÂN KHU) */}
+            <main className="flex-1 overflow-y-auto p-3 md:p-6 pb-24 md:pb-8 space-y-6">
+              {/* ================================================================
+                  PHÂN KHU 1: TRANG CHỦ (FULL-SCREEN BENTO DASHBOARD)
+                 ================================================================ */}
+              {activeTab === "dashboard" && (
+                <div className="space-y-6">
+                  {/* HÀNG 1: 3 THẺ BENTO LỚN */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    {/* Thẻ 1: Chào mừng & Khởi động nhanh */}
+                    <div className={`rounded-3xl border p-6 flex flex-col justify-between ${currentTheme.panel}`}>
+                      <div className="space-y-3">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${currentTheme.accentSoft}`}>
+                          <i className="fa-solid fa-bolt"></i>
+                          {activeSubject === "chemistry" ? "PHÂN HỆ HÓA HỌC KHTN" : "PHÂN HỆ TOÁN HỌC KHTN"}
+                        </span>
+                        <h2 className="text-xl md:text-2xl font-extrabold leading-snug break-words">
+                          {APP_CONFIG.AUTHOR_INFO.projectName}
+                        </h2>
+                        <p className="text-sm opacity-80 leading-relaxed">
+                          Hệ thống tự học tư duy nguyên lý gốc (First Principles), chống làm tròn số trung gian và hiển thị công thức chuẩn LaTeX/mhchem.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 pt-5">
+                        <button
+                          onClick={() => setActiveTab("quiz")}
+                          className={`py-3 px-4 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg ${currentTheme.accentBg}`}
+                        >
+                          <i className="fa-solid fa-play"></i>
+                          <span>Vào Phòng Thi</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab("ai_solver")}
+                          className="py-3 px-4 rounded-2xl font-bold text-xs border border-slate-600/80 hover:bg-slate-800/50 flex items-center justify-center gap-2"
+                        >
+                          <i className="fa-solid fa-wand-magic-sparkles"></i>
+                          <span>Giải Bài AI</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Thẻ 2: Gamification & Lịch chăm chỉ 7 ngày */}
+                    <div className={`rounded-3xl border p-6 flex flex-col justify-between ${currentTheme.panel}`}>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider opacity-75">
+                            Hồ sơ Gamification
+                          </span>
+                          <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold">
+                            🏆 {userProfile.rankTitle}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 pt-1">
+                          <div className="p-3.5 rounded-2xl bg-slate-950/45 border border-slate-800/80">
+                            <div className="text-xs opacity-70">Chuỗi ngày học</div>
+                            <div className="text-2xl font-extrabold text-amber-400 mt-1">
+                              🔥 {userProfile.streak} ngày
+                            </div>
+                          </div>
+                          <div className="p-3.5 rounded-2xl bg-slate-950/45 border border-slate-800/80">
+                            <div className="text-xs opacity-70">Kinh nghiệm tích lũy</div>
+                            <div className={`text-2xl font-extrabold mt-1 ${currentTheme.accentText}`}>
+                              ⚡ {userProfile.xp} XP
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Activity Heatmap 7 ngày */}
+                      <div className="pt-4 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="opacity-75 font-medium">Lịch chăm chỉ 7 ngày (Activity Heatmap):</span>
+                          <span className="text-emerald-400 font-bold">100% Hoàn thành</span>
+                        </div>
+                        <div className="grid grid-cols-7 gap-2">
+                          {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((day, i) => (
+                            <div
+                              key={day}
+                              className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-center"
+                            >
+                              <div className="text-[10px] opacity-75">{day}</div>
+                              <i className="fa-solid fa-fire text-emerald-400 text-xs mt-1"></i>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Thẻ 3: Thông tin Tác giả, Tác phẩm & Liên hệ Mở rộng (Đọc từ APP_CONFIG.AUTHOR_INFO) */}
+                    <div className={`rounded-3xl border p-6 flex flex-col justify-between ${currentTheme.panel}`}>
+                      <div className="space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold uppercase tracking-wider opacity-75">
+                            Thông tin Tác giả & Liên hệ
+                          </span>
+                          <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-semibold">
+                            Verified EdTech
+                          </span>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-slate-950/40 border border-slate-800/80 space-y-1.5 selectable-text">
+                          <div>
+                            <span className="opacity-65">Tác phẩm: </span>
+                            <strong className="break-words">{APP_CONFIG.AUTHOR_INFO.projectName}</strong>
+                          </div>
+                          <div>
+                            <span className="opacity-65">Tác giả: </span>
+                            <strong className="break-words">{APP_CONFIG.AUTHOR_INFO.authorName}</strong>
+                          </div>
+                          <div>
+                            <span className="opacity-65">Đơn vị / Trường: </span>
+                            <strong className="break-words">{APP_CONFIG.AUTHOR_INFO.schoolName}</strong>
+                          </div>
+                          <div>
+                            <span className="opacity-65">Email hỗ trợ: </span>
+                            <strong className="break-all text-cyan-400">{APP_CONFIG.AUTHOR_INFO.supportEmail}</strong>
+                          </div>
+                          <div>
+                            <span className="opacity-65">Hotline: </span>
+                            <strong className="break-words text-amber-300">{APP_CONFIG.AUTHOR_INFO.hotline}</strong>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5 pt-3">
+                        <button
+                          onClick={handleSendGmailReport}
+                          className="py-2.5 px-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 font-bold text-xs flex items-center justify-center gap-1.5"
+                        >
+                          <i className="fa-solid fa-envelope-circle-check"></i>
+                          <span>Báo cáo Gmail</span>
+                        </button>
+                        <button
+                          onClick={handleCloudBackup}
+                          className="py-2.5 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-200 font-bold text-xs flex items-center justify-center gap-1.5"
+                        >
+                          <i className="fa-brands fa-google-drive"></i>
+                          <span>Sao lưu Drive</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* HÀNG 2: 4 THẺ KPI */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className={`p-5 rounded-3xl border ${currentTheme.panel}`}>
+                      <div className="text-xs opacity-75">Tổng số chuyên đề Hóa - Toán</div>
+                      <div className="text-2xl md:text-3xl font-extrabold mt-1">12 Chuyên đề</div>
+                      <div className="text-[11px] text-emerald-400 mt-1">
+                        {questions.length} câu hỏi chuẩn LaTeX
+                      </div>
+                    </div>
+                    <div className={`p-5 rounded-3xl border ${currentTheme.panel}`}>
+                      <div className="text-xs opacity-75">Số lần luyện tập</div>
+                      <div className="text-2xl md:text-3xl font-extrabold mt-1">{quizHistory.length} Lượt</div>
+                      <div className="text-[11px] text-cyan-400 mt-1">Lưu lịch sử tiến bộ tự động</div>
+                    </div>
+                    <div className={`p-5 rounded-3xl border ${currentTheme.panel}`}>
+                      <div className="text-xs opacity-75">Điểm trung bình hệ 10</div>
+                      <div className="text-2xl md:text-3xl font-extrabold text-amber-400 mt-1">
+                        {avgScore10} / 10
+                      </div>
+                      <div className="text-[11px] opacity-75 mt-1">Đánh giá năng lực chuẩn KHTN</div>
+                    </div>
+                    <div className={`p-5 rounded-3xl border ${currentTheme.panel}`}>
+                      <div className="text-xs opacity-75">Tỷ lệ vượt Bẫy kiến thức</div>
+                      <div className="text-2xl md:text-3xl font-extrabold text-emerald-400 mt-1">
+                        {trapMasteryAvg}%
+                      </div>
+                      <div className="text-[11px] opacity-75 mt-1">{traps.length} bẫy đang theo dõi</div>
+                    </div>
+                  </div>
+
+                  {/* HÀNG 3: LỘ TRÌNH HỌC TIẾP 4 BƯỚC CÁ NHÂN HÓA & DANH SÁCH BẪY TRỌNG TÂM */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-extrabold text-base flex items-center gap-2">
+                          <i className="fa-solid fa-route text-emerald-400"></i>
+                          <span>Lộ trình Học tiếp 4 Bước Cá nhân hóa</span>
+                        </h3>
+                        <span className="text-xs opacity-70">AI Adaptive Path</span>
+                      </div>
+                      <div className="space-y-3 text-sm">
+                        {[
+                          {
+                            step: "Bước 1",
+                            title: "Nắm vững Bảo toàn Electron & Cân bằng Ion-Electron",
+                            desc: "Ôn kỹ bán phản ứng $2\\text{FeC}_2\\text{O}_4 \\rightarrow 2\\text{Fe}^{3+} + 4\\text{CO}_2 + 6\\text{e}$ ($0,2\\text{ mol}$ nhường $0,6\\text{ mol e}$)."
+                          },
+                          {
+                            step: "Bước 2",
+                            title: "Chuẩn hóa Phổ IR & Độ tăng Phân tử khối Hữu cơ",
+                            desc: "Nhớ peak $\\tilde{\\nu} \\approx 1700\\text{ cm}^{-1}$ của $\\text{C=O}$ và quy tắc thế $-\\text{H}$ bằng $-\\text{OH}$ tăng $+16\\text{ đvC}$ ($M = 306\\text{ g/mol}$)."
+                          },
+                          {
+                            step: "Bước 3",
+                            title: "Rèn kỷ luật Giữ nguyên Phân số Trung gian",
+                            desc: "Giữ nguyên $n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}$ và $n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$ khi tính nhiệt đốt cháy E5."
+                          },
+                          {
+                            step: "Bước 4",
+                            title: "Luyện đề Tổ hợp Lượng giác - Lôgarit - Đạo hàm",
+                            desc: "Thực hành tìm cực trị hệ số góc tiếp tuyến $k_{\\min} = f'(x_0)$ và đếm nghiệm lượng giác."
+                          }
+                        ].map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="p-3.5 rounded-2xl bg-slate-950/45 border border-slate-800/80 flex items-start gap-3"
+                          >
+                            <span className={`px-2.5 py-1 rounded-xl text-xs font-extrabold shrink-0 ${currentTheme.accentBg}`}>
+                              {item.step}
+                            </span>
+                            <div className="space-y-1 min-w-0">
+                              <div className="font-bold">{item.title}</div>
+                              <div className="text-xs opacity-80">
+                                <MathChemText content={item.desc} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Danh sách Bẫy Trọng Tâm Cần Nhớ */}
+                    <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-extrabold text-base flex items-center gap-2">
+                          <i className="fa-solid fa-triangle-exclamation text-amber-400"></i>
+                          <span>Danh sách Bẫy Trọng Tâm Cần Nhớ</span>
+                        </h3>
+                        <button
+                          onClick={() => setActiveTab("mistake_vault")}
+                          className="text-xs font-bold text-emerald-400 hover:underline"
+                        >
+                          Xem Kho Bẫy ({traps.length}) →
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        {traps.slice(0, 4).map((trap) => (
+                          <div
+                            key={trap.id}
+                            className="p-3.5 rounded-2xl bg-slate-950/45 border border-slate-800/80 space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-sm text-amber-300">{trap.title}</span>
+                              <span className="text-xs font-bold text-emerald-400">{trap.mastery}% Mastery</span>
+                            </div>
+                            <div className="text-xs opacity-85">
+                              <MathChemText content={trap.correctPrinciple} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ================================================================
+                  PHÂN KHU 2: PHÒNG KIỂM TRA & LUYỆN TẬP ĐA ĐỊNH DẠNG (QUIZ ARENA)
+                 ================================================================ */}
+              {activeTab === "quiz" && (
+                <div className="space-y-6">
+                  {/* Thanh Bộ lọc Phòng thi */}
+                  <div className={`rounded-3xl border p-5 ${currentTheme.panel} grid grid-cols-1 md:grid-cols-4 gap-3`}>
+                    <div>
+                      <label className="text-xs font-bold opacity-75 block mb-1">1. Chọn Môn học</label>
+                      <select
+                        value={activeSubject}
+                        onChange={(e) => {
+                          setActiveSubject(e.target.value);
+                          setQuizFilterTopic("ALL");
+                          handleResetQuiz();
+                        }}
+                        className="w-full rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 px-3 py-2 text-xs font-semibold"
+                      >
+                        <option value="chemistry">🧪 Hóa học KHTN</option>
+                        <option value="math">📐 Toán học KHTN</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold opacity-75 block mb-1">2. Chọn Chuyên đề</label>
+                      <select
+                        value={quizFilterTopic}
+                        onChange={(e) => {
+                          setQuizFilterTopic(e.target.value);
+                          handleResetQuiz();
+                        }}
+                        className="w-full rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 px-3 py-2 text-xs font-semibold"
+                      >
+                        {subjectTopics.map((t) => (
+                          <option key={t} value={t}>
+                            {t === "ALL" ? "Tất cả chuyên đề" : t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold opacity-75 block mb-1">3. Chọn Mức độ tư duy</label>
+                      <select
+                        value={quizFilterLevel}
+                        onChange={(e) => {
+                          setQuizFilterLevel(e.target.value);
+                          handleResetQuiz();
+                        }}
+                        className="w-full rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 px-3 py-2 text-xs font-semibold"
+                      >
+                        <option value="ALL">Tất cả mức độ</option>
+                        <option value="Nhận biết">Nhận biết</option>
+                        <option value="Thông hiểu">Thông hiểu</option>
+                        <option value="Vận dụng thấp">Vận dụng thấp</option>
+                        <option value="Vận dụng cao">Vận dụng cao</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold opacity-75 block mb-1">4. Số lượng câu hỏi</label>
+                      <div className="flex gap-2">
+                        {[10, 20, 30].map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => {
+                              setQuizCount(num);
+                              handleResetQuiz();
+                            }}
+                            className={`flex-1 py-2 rounded-xl text-xs font-bold border ${
+                              quizCount === num
+                                ? currentTheme.accentBg
+                                : "bg-slate-950/60 border-slate-700 opacity-75"
+                            }`}
+                          >
+                            {num} câu
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {filteredQuizQuestions.length === 0 ? (
+                    <div className={`rounded-3xl border p-8 text-center ${currentTheme.panel}`}>
+                      <p className="font-bold">Không có câu hỏi khớp bộ lọc hiện tại.</p>
+                      <button
+                        onClick={() => {
+                          setQuizFilterTopic("ALL");
+                          setQuizFilterLevel("ALL");
+                        }}
+                        className={`mt-3 px-4 py-2 rounded-xl text-xs font-bold ${currentTheme.accentBg}`}
+                      >
+                        Đặt lại bộ lọc
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {/* Cột trái (2 phần): Danh sách câu hỏi đa định dạng */}
+                      <div className="lg:col-span-2 space-y-5">
+                        {filteredQuizQuestions.map((q, idx) => {
+                          const ans = userAnswers[q.id];
+                          const isCorrect = quizSubmitted && isQuestionCorrect(q, ans);
+
+                          return (
+                            <div
+                              key={q.id}
+                              id={`quiz_q_${idx}`}
+                              className={`rounded-3xl border p-5 md:p-6 space-y-4 ${currentTheme.panel} ${
+                                currentQuestionIdx === idx ? "ring-2 ring-emerald-500/50" : ""
+                              }`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-3 py-1 rounded-xl text-xs font-extrabold ${currentTheme.accentBg}`}>
+                                    Câu {idx + 1}
+                                  </span>
+                                  <span className="px-2.5 py-1 rounded-xl bg-slate-950/60 border border-slate-700 text-xs font-semibold">
+                                    {q.level}
+                                  </span>
+                                  <span className="px-2.5 py-1 rounded-xl bg-cyan-500/15 text-cyan-300 text-xs font-semibold">
+                                    {q.type === "mcq"
+                                      ? "Trắc nghiệm 4 PA"
+                                      : q.type === "tf"
+                                      ? "Đúng / Sai (a,b,c,d)"
+                                      : "Trả lời ngắn"}
+                                  </span>
+                                </div>
+
+                                <button
+                                  onClick={() =>
+                                    setRevealedHints((prev) => ({ ...prev, [q.id]: !prev[q.id] }))
+                                  }
+                                  className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5"
+                                >
+                                  <span>✨ AI Gợi ý tư duy (Hint)</span>
+                                </button>
+                              </div>
+
+                              {/* Đề bài */}
+                              <div className="text-sm md:text-base font-medium leading-relaxed">
+                                <MathChemText content={q.question} />
+                              </div>
+
+                              {/* Gợi ý bước 1 (Không lộ đáp án) */}
+                              {revealedHints[q.id] && (
+                                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 space-y-1">
+                                  <div className="font-bold">💡 Gợi ý tư duy bước 1:</div>
+                                  <MathChemText content={q.hint} />
+                                </div>
+                              )}
+
+                              {/* Dạng 1: Trắc nghiệm 4 phương án A, B, C, D */}
+                              {q.type === "mcq" && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                  {q.options.map((opt) => {
+                                    const letter = opt.trim().charAt(0);
+                                    const selected = ans === letter;
+                                    return (
+                                      <button
+                                        key={opt}
+                                        disabled={quizSubmitted}
+                                        onClick={() => {
+                                          setCurrentQuestionIdx(idx);
+                                          setUserAnswers((prev) => ({ ...prev, [q.id]: letter }));
+                                        }}
+                                        className={`p-3.5 rounded-2xl border text-left text-sm transition-all flex items-center justify-between gap-2 ${
+                                          selected
+                                            ? `${currentTheme.accentSoft} ring-2 ring-emerald-400/50 font-bold`
+                                            : "bg-slate-950/40 border-slate-800 hover:border-slate-600"
+                                        }`}
+                                      >
+                                        <MathChemText content={opt} />
+                                        {selected && <i className="fa-solid fa-circle-check text-emerald-400"></i>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Dạng 2: Trắc nghiệm Đúng / Sai (4 mệnh đề a, b, c, d) */}
+                              {q.type === "tf" && (
+                                <div className="space-y-2.5 pt-1">
+                                  {q.statements.map((st) => {
+                                    const currentObj = ans || {};
+                                    const val = currentObj[st.id];
+                                    return (
+                                      <div
+                                        key={st.id}
+                                        className="p-3.5 rounded-2xl bg-slate-950/45 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                      >
+                                        <div className="text-xs md:text-sm">
+                                          <strong className="mr-1.5 text-emerald-400">{st.id})</strong>
+                                          <MathChemText content={st.text} />
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <button
+                                            disabled={quizSubmitted}
+                                            onClick={() =>
+                                              setUserAnswers((prev) => ({
+                                                ...prev,
+                                                [q.id]: { ...(prev[q.id] || {}), [st.id]: true }
+                                              }))
+                                            }
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                                              val === true
+                                                ? "bg-emerald-500 text-slate-950 border-emerald-400"
+                                                : "bg-slate-900 border-slate-700"
+                                            }`}
+                                          >
+                                            Đúng
+                                          </button>
+                                          <button
+                                            disabled={quizSubmitted}
+                                            onClick={() =>
+                                              setUserAnswers((prev) => ({
+                                                ...prev,
+                                                [q.id]: { ...(prev[q.id] || {}), [st.id]: false }
+                                              }))
+                                            }
+                                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                                              val === false
+                                                ? "bg-rose-500 text-white border-rose-400"
+                                                : "bg-slate-900 border-slate-700"
+                                            }`}
+                                          >
+                                            Sai
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Dạng 3: Trả lời ngắn / Tính toán */}
+                              {q.type === "short" && (
+                                <div className="pt-1">
+                                  <input
+                                    type="text"
+                                    disabled={quizSubmitted}
+                                    value={ans || ""}
+                                    onChange={(e) => {
+                                      setCurrentQuestionIdx(idx);
+                                      setUserAnswers((prev) => ({ ...prev, [q.id]: e.target.value }));
+                                    }}
+                                    placeholder="Nhập đáp số (ví dụ: 306, 400, 33.1, 670)..."
+                                    className="w-full sm:w-80 px-4 py-2.5 rounded-2xl bg-slate-950/75 text-slate-100 border border-slate-700 font-mono text-sm focus:outline-none focus:border-emerald-400"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Lời giải chi tiết sau khi nộp bài */}
+                              {quizSubmitted && (
+                                <div
+                                  className={`p-4 rounded-2xl border text-xs space-y-2 ${
+                                    isCorrect
+                                      ? "bg-emerald-500/10 border-emerald-500/40"
+                                      : "bg-rose-500/10 border-rose-500/40"
+                                  }`}
+                                >
+                                  <div className="font-extrabold flex items-center justify-between">
+                                    <span>
+                                      {isCorrect ? "✅ CHÍNH XÁC!" : "❌ CẦN LƯU Ý (Đã lưu vào Kho Bẫy)"}
+                                    </span>
+                                    {q.type !== "tf" && (
+                                      <span>Đáp án chuẩn: {q.correctAnswer}</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <MathChemText content={q.explanation} />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Cột phải: Bảng điều hướng câu hỏi (Question Palette) & Thống kê sau nộp bài */}
+                      <div className="space-y-5">
+                        <div className={`rounded-3xl border p-5 sticky top-4 space-y-4 ${currentTheme.panel}`}>
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-extrabold text-sm">Bảng điều hướng câu hỏi</h3>
+                            <span className="text-xs opacity-75">
+                              {Object.keys(userAnswers).length}/{filteredQuizQuestions.length} đã làm
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-5 gap-2">
+                            {filteredQuizQuestions.map((q, i) => {
+                              const done = userAnswers[q.id] !== undefined;
+                              const ok = quizSubmitted && isQuestionCorrect(q, userAnswers[q.id]);
+                              return (
+                                <button
+                                  key={q.id}
+                                  onClick={() => {
+                                    setCurrentQuestionIdx(i);
+                                    document.getElementById(`quiz_q_${i}`)?.scrollIntoView({ behavior: "smooth" });
+                                  }}
+                                  className={`py-2.5 rounded-xl font-bold text-xs border transition-all ${
+                                    quizSubmitted
+                                      ? ok
+                                        ? "bg-emerald-500 text-slate-950 border-emerald-400"
+                                        : "bg-rose-500 text-white border-rose-400"
+                                      : done
+                                      ? currentTheme.accentBg
+                                      : "bg-slate-950/50 border-slate-800"
+                                  }`}
+                                >
+                                  {i + 1}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {!quizSubmitted ? (
+                            <button
+                              onClick={handleSubmitQuiz}
+                              className={`w-full py-3.5 rounded-2xl font-extrabold text-sm shadow-xl ${currentTheme.accentBg}`}
+                            >
+                              <i className="fa-solid fa-paper-plane mr-2"></i>
+                              Nộp Bài & Chấm Điểm AI
+                            </button>
+                          ) : (
+                            <div className="space-y-3 pt-2 border-t border-slate-800 text-xs">
+                              <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                                <div className="font-bold text-emerald-400">
+                                  Phân tích Kết quả & Lộ trình 4 bước:
+                                </div>
+                                <p className="opacity-85">
+                                  • Các câu làm sai đã được đẩy tự động vào <strong>Kho Bẫy Kiến Thức</strong>.
+                                </p>
+                                <p className="opacity-85">
+                                  • Khuyến nghị: Ôn lại chuyên đề có câu sai và luyện tập lặp lại ngắt quãng.
+                                </p>
+                              </div>
+                              <button
+                                onClick={handleResetQuiz}
+                                className="w-full py-3 rounded-2xl font-bold bg-slate-800 hover:bg-slate-700 text-white"
+                              >
+                                Làm lại đề này
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ================================================================
+                  PHÂN KHU 3: TRỢ LÝ AI GIẢI BÀI TẬP & QUÉT ĐỀ (GEMINI WORKSPACE)
+                 ================================================================ */}
+              {activeTab === "ai_solver" && (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Cột nhập đề & Đề mẫu HSG */}
+                  <div className={`lg:col-span-5 rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                    <div className="flex items-center justify-between">
+                      <h2 className="font-extrabold text-base flex items-center gap-2">
+                        <i className="fa-solid fa-microchip text-emerald-400"></i>
+                        <span>Trợ lý AI Giải Bài & Quét Đề (First-Principles)</span>
+                      </h2>
+                    </div>
+
+                    {/* Chọn nhanh đề mẫu chuẩn KHTN */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold opacity-75">Chọn nhanh bài toán chuẩn KHTN / HSG:</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        {SAMPLE_AI_PROBLEMS.map((smp) => (
+                          <button
+                            key={smp.id}
+                            onClick={() => {
+                              setAiPrompt(smp.prompt);
+                              setAiSolution(buildLocalFirstPrinciplesSolution(smp.prompt));
+                            }}
+                            className="p-3 rounded-2xl bg-slate-950/50 hover:bg-slate-900 border border-slate-800 text-left text-xs transition-all flex items-center justify-between gap-2"
+                          >
+                            <span className="font-bold truncate">{smp.title}</span>
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-semibold shrink-0">
+                              {smp.badge}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Khung nhập đề bài */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold opacity-75">Nhập đề bài Hóa học / Toán học bất kỳ:</label>
+                      <textarea
+                        rows={5}
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder="Nhập đề bài Hóa học hoặc Toán học cần giải chi tiết từ nguyên lý gốc..."
+                        className="w-full rounded-2xl bg-slate-950/75 text-slate-100 border border-slate-700 p-3.5 text-sm focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+
+                    {/* Tải ảnh chụp đề bài (OCR) */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="px-3.5 py-2.5 rounded-2xl bg-slate-950/60 hover:bg-slate-900 border border-slate-700 text-xs font-bold cursor-pointer flex items-center gap-2">
+                        <i className="fa-solid fa-camera text-cyan-400"></i>
+                        <span>Tải ảnh chụp đề bài (OCR)</span>
+                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                      </label>
+                      {aiImageBase64 && (
+                        <button
+                          onClick={() => setAiImageBase64(null)}
+                          className="text-xs text-rose-400 underline"
+                        >
+                          Xóa ảnh đính kèm
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={handleSolveWithGemini}
+                      disabled={aiLoading}
+                      className={`w-full py-3.5 rounded-2xl font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 ${currentTheme.accentBg}`}
+                    >
+                      <i className={`fa-solid ${aiLoading ? "fa-spinner fa-spin" : "fa-bolt-lightning"}`}></i>
+                      <span>{aiLoading ? "Đang phân tích Nguyên lý gốc..." : "Phân Tích & Giải Chi Tiết Từng Bước"}</span>
+                    </button>
+                  </div>
+
+                  {/* Cột Hiển thị Lời giải First-Principles */}
+                  <div className={`lg:col-span-7 rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <div>
+                        <h3 className="font-extrabold text-base">Lời giải Tường minh từ Nguyên lý Gốc</h3>
+                        <p className="text-xs opacity-70">
+                          Bảo toàn nguyên tố • Bảo toàn electron • Không làm tròn số trung gian
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold">
+                        {APP_CONFIG.GEMINI_MODEL}
+                      </span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-950/55 border border-slate-800/90 text-sm leading-relaxed space-y-2">
+                      <MathChemText content={aiSolution} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ================================================================
+                  PHÂN KHU 4: PHÂN TÍCH LỖI SAI & KHO BẪY KIẾN THỨC (MISTAKE VAULT)
+                 ================================================================ */}
+              {activeTab === "mistake_vault" && (
+                <div className="space-y-5">
+                  <div className={`rounded-3xl border p-6 flex flex-wrap items-center justify-between gap-4 ${currentTheme.panel}`}>
+                    <div>
+                      <h2 className="text-lg font-extrabold flex items-center gap-2">
+                        <i className="fa-solid fa-shield-halved text-amber-400"></i>
+                        <span>Kho Bẫy Kiến Thức & Lặp Lại Ngắt Quãng (Spaced Repetition)</span>
+                      </h2>
+                      <p className="text-xs opacity-75 mt-1">
+                        Lưu trữ các bẫy tư duy thường gặp kèm nguyên lý chuẩn và thanh tiến độ khắc phục (% Mastery).
+                      </p>
+                    </div>
+                    <div className="px-4 py-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-bold">
+                      Trung bình khắc phục: {trapMasteryAvg}% Mastery
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {traps.map((trap) => (
+                      <div
+                        key={trap.id}
+                        className={`rounded-3xl border p-6 space-y-4 flex flex-col justify-between ${currentTheme.panel}`}
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-bold">
+                              {trap.subject === "chemistry" ? "🧪 Bẫy Hóa học" : "📐 Bẫy Toán học"}
+                            </span>
+                            <span className="text-xs opacity-75">Lịch ôn: {trap.nextReview}</span>
+                          </div>
+                          <h3 className="font-extrabold text-base">{trap.title}</h3>
+                          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs space-y-1">
+                            <div className="font-bold text-rose-300">❌ Thói quen dễ sai:</div>
+                            <MathChemText content={trap.wrongHabit} />
+                          </div>
+                          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-1">
+                            <div className="font-bold text-emerald-300">✅ Nguyên lý & Công thức chuẩn:</div>
+                            <MathChemText content={trap.correctPrinciple} />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                          <div className="flex items-center justify-between text-xs font-bold">
+                            <span>Tiến độ khắc phục (% Mastery)</span>
+                            <span className="text-emerald-400">{trap.mastery}%</span>
+                          </div>
+                          <div className="w-full h-2.5 rounded-full bg-slate-950 overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 transition-all duration-500"
+                              style={{ width: `${trap.mastery}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-end pt-1">
+                            <button
+                              onClick={() => {
+                                setTraps((prev) =>
+                                  prev.map((t) =>
+                                    t.id === trap.id
+                                      ? {
+                                          ...t,
+                                          mastery: Math.min(100, t.mastery + 15),
+                                          nextReview: "3 ngày tới"
+                                        }
+                                      : t
+                                  )
+                                );
+                                setUserProfile((prev) => ({ ...prev, xp: prev.xp + 15 }));
+                                showToast("Đã ôn tập bẫy kiến thức (+15% Mastery & +15 XP)!");
+                              }}
+                              className={`px-3.5 py-2 rounded-xl text-xs font-bold ${currentTheme.accentBg}`}
+                            >
+                              ✓ Đánh dấu Đã Ôn Tập (+15% Mastery)
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ================================================================
+                  PHÂN KHU 5: KIẾN THỨC CƠ BẢN & SỔ TAY TRA CỨU TƯƠNG TÁC
+                 ================================================================ */}
+              {activeTab === "handbook" && (
+                <div className="space-y-6">
+                  {/* Máy mô phỏng & tra cứu phổ Hồng ngoại (IR) 1500 - 3600 cm^-1 */}
+                  <div className={`rounded-3xl border p-6 space-y-5 ${currentTheme.panel}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h2 className="text-lg font-extrabold flex items-center gap-2">
+                          <i className="fa-solid fa-wave-square text-cyan-400"></i>
+                          <span>Máy Mô Phỏng & Tra Cứu Phổ Hồng Ngoại (IR) Tương Tác</span>
+                        </h2>
+                        <p className="text-xs opacity-75">
+                          Kéo thanh trượt quét số sóng $\tilde{\nu}$ từ $1500 - 3600\text{ cm}^{-1}$ để nhận diện liên kết hóa học.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        {[1700, 3350, 2950, 2240, 1630].map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => setIrWaveNumber(preset)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                              Number(irWaveNumber) === preset
+                                ? currentTheme.accentBg
+                                : "bg-slate-950/60 border-slate-700"
+                            }`}
+                          >
+                            {preset} cm⁻¹
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Thanh trượt số sóng */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm font-bold">
+                        <span>Số sóng đang quét: $\tilde{\nu} = {irWaveNumber}\text{ cm}^{-1}$</span>
+                        <span className="text-emerald-400">Độ truyền qua: {irAnalysis.transmittance}% T</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1500"
+                        max="3600"
+                        step="5"
+                        value={irWaveNumber}
+                        onChange={(e) => setIrWaveNumber(Number(e.target.value))}
+                        className="w-full accent-emerald-400 cursor-pointer h-2.5 rounded-lg"
+                      />
+                      <div className="flex justify-between text-[11px] opacity-65 font-mono">
+                        <span>1500 cm⁻¹</span>
+                        <span>1700 cm⁻¹ (C=O)</span>
+                        <span>2200 cm⁻¹ (C≡N)</span>
+                        <span>3000 cm⁻¹ (O-H acid)</span>
+                        <span>3600 cm⁻¹ (O-H)</span>
+                      </div>
+                    </div>
+
+                    {/* Kết quả nhận diện peak phổ IR */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-2xl bg-slate-950/55 border border-slate-800">
+                        <div className="text-xs opacity-70">Liên kết đặc trưng</div>
+                        <div className="font-extrabold text-base text-emerald-400 mt-1">{irAnalysis.bond}</div>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-slate-950/55 border border-slate-800">
+                        <div className="text-xs opacity-70">Hình dạng Peak hấp thụ</div>
+                        <div className="font-bold text-sm text-amber-300 mt-1">{irAnalysis.shape}</div>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-slate-950/55 border border-slate-800">
+                        <div className="text-xs opacity-70">Ký hiệu chuẩn LaTeX</div>
+                        <div className="font-bold text-sm mt-1">
+                          <MathChemText content={irAnalysis.formula} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sổ tay Hóa học & Sổ tay Toán học */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Sổ tay Hóa học */}
+                    <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                      <h3 className="font-extrabold text-base flex items-center gap-2">
+                        <span>🧪 Sổ Tay Hóa Học: Oxi hóa-Khử & Nhiệt Động Lực Học</span>
+                      </h3>
+                      <div className="space-y-3 text-xs md:text-sm">
+                        <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-1">
+                          <div className="font-bold text-emerald-400">
+                            1. Bán phản ứng Oxi hóa $\text{FeC}_2\text{O}_4$ & Thế điện cực chuẩn:
+                          </div>
+                          <MathChemText
+                            content={`$$2\\text{FeC}_2\\text{O}_4 \\rightarrow 2\\text{Fe}^{3+} + 4\\text{CO}_2 + 6\\text{e} \\quad (0,2\\text{ mol nhường } 0,6\\text{ mol e})$$ $$E^\\circ_{\\text{pin}} = E^\\circ_{\\text{cathode (+)}} - E^\\circ_{\\text{anode (-)}}$$`}
+                          />
+                        </div>
+                        <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-1">
+                          <div className="font-bold text-cyan-400">
+                            2. Công thức Nhiệt động lực học ($\Delta_r H^\circ_{298}$):
+                          </div>
+                          <MathChemText
+                            content={`$$\\Delta_r H^\\circ_{298} = \\sum \\Delta_f H^\\circ_{298}(\\text{sản phẩm}) - \\sum \\Delta_f H^\\circ_{298}(\\text{chất đầu})$$ $$\\Delta_r H^\\circ_{298} = \\sum E_b(\\text{chất đầu}) - \\sum E_b(\\text{sản phẩm})$$`}
+                          />
+                        </div>
+                        <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-1">
+                          <div className="font-bold text-amber-300">
+                            3. Hữu cơ: Catechin & Thủy phân Triglyceride X:
+                          </div>
+                          <MathChemText
+                            content={`• Catechin ($\\text{C}_{15}\\text{H}_{14}\\text{O}_6$, $M=290$) gắn thêm $1$ nhóm $-\\text{OH}$ vào vòng thơm $\\rightarrow M = 306\\text{ g/mol}$.\n• Triglyceride $\\text{X}$ ($\\text{C}_{57}\\text{H}_{102}\\text{O}_6$, $M=882$): $0,2\\text{ mol X}$ cần $0,6\\text{ mol NaOH}$ ($400\\text{ mL}$ dd $1,5\\text{ M}$).`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sổ tay Toán học */}
+                    <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                      <h3 className="font-extrabold text-base flex items-center gap-2">
+                        <span>📐 Sổ Tay Toán Học: Lượng Giác, Dãy Số, Giới Hạn & Đạo Hàm</span>
+                      </h3>
+                      <div className="space-y-3 text-xs md:text-sm">
+                        <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-1">
+                          <div className="font-bold text-emerald-400">
+                            1. Công thức Lượng giác & Dao động điều hòa:
+                          </div>
+                          <MathChemText
+                            content={`$$\\sin 2x = 2\\sin x\\cos x, \\quad \\cos 2x = 2\\cos^2 x - 1 = 1 - 2\\sin^2 x$$`}
+                          />
+                        </div>
+                        <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-1">
+                          <div className="font-bold text-cyan-400">
+                            2. Cấp số cộng ($d$) & Cấp số nhân ($q$):
+                          </div>
+                          <MathChemText
+                            content={`$$S_n^{\\text{CSC}} = \\frac{n[2u_1 + (n-1)d]}{2}, \\qquad S_n^{\\text{CSN}} = u_1 \\cdot \\frac{1 - q^n}{1 - q} \\;(q \\neq 1)$$`}
+                          />
+                        </div>
+                        <div className="p-3.5 rounded-2xl bg-slate-950/50 border border-slate-800 space-y-1">
+                          <div className="font-bold text-amber-300">
+                            3. Giới hạn, Mũ - Lôgarit & Đạo hàm tiếp tuyến:
+                          </div>
+                          <MathChemText
+                            content={`$$\\log_{a^k} b = \\frac{1}{k}\\log_a b, \\qquad y - y_0 = f'(x_0)(x - x_0)$$`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ================================================================
+                  PHÂN KHU 6: TRUNG TÂM NẠP TÀI LIỆU AI & TẠO CÂU HỎI (IMPORTER)
+                 ================================================================ */}
+              {activeTab === "importer" && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Bóc tách tự động văn bản Word/PDF */}
+                  <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                    <h2 className="font-extrabold text-base flex items-center gap-2">
+                      <i className="fa-solid fa-wand-sparkles text-emerald-400"></i>
+                      <span>Bóc Tách Đề Thi Tự Động Từ Word / PDF</span>
+                    </h2>
+                    <p className="text-xs opacity-75">
+                      Dán nội dung đề thi thô để hệ thống tự động tách thành câu hỏi trắc nghiệm chuẩn LaTeX và nạp vào Phòng thi.
+                    </p>
+                    <textarea
+                      rows={7}
+                      value={rawDocText}
+                      onChange={(e) => setRawDocText(e.target.value)}
+                      className="w-full rounded-2xl bg-slate-950/75 text-slate-100 border border-slate-700 p-3.5 text-xs font-mono"
+                    />
+                    <button
+                      onClick={handleAutoParseDoc}
+                      className={`w-full py-3 rounded-2xl font-extrabold text-xs shadow-lg ${currentTheme.accentBg}`}
+                    >
+                      <i className="fa-solid fa-bolt mr-1.5"></i>
+                      Bóc Tách Tự Động & Lưu Vào Ngân Hàng Đề
+                    </button>
+                  </div>
+
+                  {/* Tạo câu hỏi thủ công + Xem trước công thức (Live KaTeX Preview) */}
+                  <form
+                    onSubmit={handleSaveManualQuestion}
+                    className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}
+                  >
+                    <h2 className="font-extrabold text-base flex items-center gap-2">
+                      <i className="fa-solid fa-square-root-variable text-cyan-400"></i>
+                      <span>Tạo Câu Hỏi Thủ Công & Xem Trước Công Thức (Live KaTeX)</span>
+                    </h2>
+
+                    {/* Thanh phím tắt ký hiệu Hóa học / Toán học */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: "→", code: " $\\rightarrow$ " },
+                        { label: "⇌", code: " $\\rightleftharpoons$ " },
+                        { label: "ΔrH°298", code: " $\\Delta_r H^\\circ_{298}$ " },
+                        { label: "ν̃ (cm⁻¹)", code: " $\\tilde{\\nu}\\text{ (cm}^{-1}\\text{)}$ " },
+                        { label: "FeC₂O₄", code: " $\\text{FeC}_2\\text{O}_4$ " },
+                        { label: "Phân số", code: " $\\frac{a}{b}$ " },
+                        { label: "Căn thức", code: " $\\sqrt{x}$ " },
+                        { label: "lim", code: " $\\lim_{x \\to x_0}$ " }
+                      ].map((sym) => (
+                        <button
+                          type="button"
+                          key={sym.label}
+                          onClick={() =>
+                            setNewQForm((prev) => ({ ...prev, question: prev.question + sym.code }))
+                          }
+                          className="px-2.5 py-1 rounded-xl bg-slate-950/70 hover:bg-slate-800 border border-slate-700 text-xs font-mono"
+                        >
+                          {sym.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      value={newQForm.question}
+                      onChange={(e) => setNewQForm((prev) => ({ ...prev, question: e.target.value }))}
+                      placeholder="Nhập nội dung câu hỏi (dùng $...$ cho công thức)..."
+                      className="w-full rounded-2xl bg-slate-950/75 text-slate-100 border border-slate-700 p-3 text-xs"
+                    />
+
+                    {/* Khung Xem trước công thức (Live KaTeX Preview) */}
+                    <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-emerald-500/30 space-y-1">
+                      <div className="text-[11px] font-bold text-emerald-400">
+                        👁️ Xem trước công thức trực tiếp (Live KaTeX Preview):
+                      </div>
+                      <div className="text-sm">
+                        <MathChemText content={newQForm.question} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {["optionA", "optionB", "optionC", "optionD"].map((key, i) => (
+                        <input
+                          key={key}
+                          type="text"
+                          value={newQForm[key]}
+                          onChange={(e) => setNewQForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={`Phương án ${["A", "B", "C", "D"][i]}`}
+                          className="px-3 py-2 rounded-xl bg-slate-950/75 text-slate-100 border border-slate-700 text-xs"
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      type="submit"
+                      className={`w-full py-3 rounded-2xl font-extrabold text-xs shadow-lg ${currentTheme.accentBg}`}
+                    >
+                      + Lưu Câu Hỏi Vào Ngân Hàng Đề
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* ================================================================
+                  PHÂN KHU 7: TIẾN ĐỘ, BIỂU ĐỒ RADAR 6 TRỤC & BẢNG XẾP HẠNG
+                 ================================================================ */}
+              {activeTab === "analytics" && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Biểu đồ SVG Radar 6 trục */}
+                    <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-extrabold text-base">
+                            Biểu đồ SVG Radar 6 Trục ({activeSubject === "chemistry" ? "Môn Hóa Học" : "Môn Toán Học"})
+                          </h3>
+                          <p className="text-xs opacity-75">
+                            Phân tích đa chiều mức độ làm chủ 6 chuyên đề cốt lõi
+                          </p>
+                        </div>
+                      </div>
+                      <RadarChartSVG axes={radarAxesData} accentColor={currentTheme.hex} />
+                    </div>
+
+                    {/* Biểu đồ SVG Area Chart tiến bộ điểm số */}
+                    <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                      <div>
+                        <h3 className="font-extrabold text-base">
+                          Biểu đồ Tiến Độ Điểm Số Qua Các Lần Thi (SVG Area Chart)
+                        </h3>
+                        <p className="text-xs opacity-75">
+                          Theo dõi sự tiến bộ điểm số hệ 10 theo thời gian thực
+                        </p>
+                      </div>
+                      <AreaChartSVG history={quizHistory} accentColor={currentTheme.hex} />
+                    </div>
+                  </div>
+
+                  {/* Bảng Xếp Hạng (Realtime Leaderboard) */}
+                  <div className={`rounded-3xl border p-6 space-y-4 ${currentTheme.panel}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-extrabold text-base flex items-center gap-2">
+                        <i className="fa-solid fa-trophy text-amber-400"></i>
+                        <span>Bảng Xếp Hạng Đua Top KHTN (Top XP • Top Streak • Top Rank)</span>
+                      </h3>
+                      <span className="text-xs opacity-75">Đồng bộ Realtime</span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs md:text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800 opacity-75">
+                            <th className="py-3 px-3">Hạng</th>
+                            <th className="py-3 px-3">Học sinh</th>
+                            <th className="py-3 px-3">Danh hiệu Rank</th>
+                            <th className="py-3 px-3">Chuỗi Streak</th>
+                            <th className="py-3 px-3">Tổng XP</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60">
+                          {[
+                            {
+                              name: `${userProfile.name} (Bạn)`,
+                              rank: userProfile.rankTitle,
+                              streak: userProfile.streak,
+                              xp: userProfile.xp,
+                              highlight: true
+                            },
+                            {
+                              name: "Nguyễn Minh Khôi - Chuyên Hóa",
+                              rank: "Bậc Thầy Phân Tử",
+                              streak: 19,
+                              xp: 2790,
+                              highlight: false
+                            },
+                            {
+                              name: "Trần Bảo Ngọc - Đội tuyển Toán",
+                              rank: "Kiến Trúc Sư Giải Tích",
+                              streak: 15,
+                              xp: 2640,
+                              highlight: false
+                            },
+                            {
+                              name: "Lê Hoàng Nam - KHTN",
+                              rank: "Chiến Binh Lượng Tử",
+                              streak: 11,
+                              xp: 2410,
+                              highlight: false
+                            }
+                          ]
+                            .sort((a, b) => b.xp - a.xp)
+                            .map((row, index) => (
+                              <tr
+                                key={row.name}
+                                className={row.highlight ? "bg-emerald-500/15 font-bold" : ""}
+                              >
+                                <td className="py-3 px-3 font-extrabold text-amber-400">#{index + 1}</td>
+                                <td className="py-3 px-3">{row.name}</td>
+                                <td className="py-3 px-3">{row.rank}</td>
+                                <td className="py-3 px-3 text-amber-300">🔥 {row.streak} ngày</td>
+                                <td className={`py-3 px-3 font-bold ${currentTheme.accentText}`}>
+                                  ⚡ {row.xp} XP
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </main>
+
+            {/* THANH ĐIỀU HƯỚNG ĐÁY KÍNH MỜ CHO ĐIỆN THOẠI (FIXED BOTTOM GLASS NAVIGATION BAR) */}
+            {!isZenMode && (
+              <nav
+                className={`${
+                  isForcedMobile ? "flex" : "flex md:hidden"
+                } fixed bottom-0 left-0 right-0 z-40 border-t ${currentTheme.panel} px-1 py-1.5 pb-[env(safe-area-inset-bottom)] justify-around items-center`}
+              >
+                {NAV_ITEMS.map((item) => {
+                  const active = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl text-[10px] font-bold transition-all ${
+                        active ? currentTheme.accentText : "opacity-65"
+                      }`}
+                    >
+                      <i className={`fa-solid ${item.icon} text-sm mb-0.5`}></i>
+                      <span className="truncate max-w-[54px]">{item.short}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
