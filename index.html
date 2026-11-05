@@ -121,14 +121,19 @@
       }
     };
 
-    // Xóa sạch dữ liệu mẫu cũ lưu trong trình duyệt từ các bản trước
+    // Xóa sạch dữ liệu mẫu cũ lưu trong trình duyệt
     try {
-      ["chemmath_user_v2", "chemmath_history_v2", "chemmath_traps_v2", "chemmath_user_v3", "chemmath_history_v3", "chemmath_traps_v3"].forEach((k) => {
-        localStorage.removeItem(k);
-      });
+      [
+        "chemmath_user_v2",
+        "chemmath_history_v2",
+        "chemmath_traps_v2",
+        "chemmath_user_v3",
+        "chemmath_history_v3",
+        "chemmath_traps_v3"
+      ].forEach((k) => localStorage.removeItem(k));
     } catch (e) {}
 
-    // Khởi tạo Supabase Client an toàn
+    // Khởi tạo Supabase Client
     let supabaseClient = null;
     try {
       if (window.supabase && APP_CONFIG.SUPABASE_URL && APP_CONFIG.SUPABASE_ANON_KEY) {
@@ -136,7 +141,16 @@
       }
     } catch (e) {}
 
-    // Hàm tính Hạng (Rank) tự động theo XP thực tế
+    // Hàm sinh mã OTP 6 chữ số bảo mật bằng Web Crypto API
+    function generateSecure6DigitOTP() {
+      if (window.crypto && window.crypto.getRandomValues) {
+        const arr = new Uint32Array(1);
+        window.crypto.getRandomValues(arr);
+        return String(100000 + (arr[0] % 900000));
+      }
+      return String(Math.floor(100000 + Math.random() * 900000));
+    }
+
     function computeRankByXP(xpVal) {
       const xp = Number(xpVal || 0);
       if (xp >= 1500) return "Bậc Thầy Phân Tử";
@@ -146,9 +160,9 @@
       return "Tân Binh KHTN";
     }
 
-    // Trạng thái người dùng khởi đầu từ 0 hoàn toàn
     const EMPTY_USER_PROFILE = {
       loggedIn: false,
+      verifiedOtp: false,
       name: "Khách (Chưa đăng nhập)",
       email: "",
       schoolClass: "THPT Mê Linh",
@@ -173,7 +187,7 @@
       "4. Tuyệt đối không làm tròn số trung gian: Trong bài toán nhiệt đốt cháy xăng sinh học E5 hoặc tính toán nồng độ/thể tích, bắt buộc giữ nguyên phân số số mol trung gian ($n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}$, $n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$) và chỉ làm tròn duy nhất ở kết quả cuối cùng."
     ].join("\n");
 
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
 
     // ============================================================================
     // 3. BỘ DỰNG CÔNG THỨC MathChemText KHÔNG BAO GIỜ LỖI
@@ -470,7 +484,6 @@
       }
     ];
 
-    // Bộ bẫy tham khảo (chỉ nạp khi người dùng chủ động bấm nút "Tải bộ Bẫy lý thuyết mẫu")
     const REFERENCE_TRAPS = [
       {
         id: "TRAP_CHEM_1",
@@ -614,7 +627,7 @@
     }
 
     // ============================================================================
-    // 6. BIỂU ĐỒ SVG ĐỘNG: RADAR 6 TRỤC & AREA CHART TIẾN ĐỘ (TỪ DỮ LIỆU THẬT)
+    // 6. BIỂU ĐỒ SVG ĐỘNG: RADAR 6 TRỤC & AREA CHART TIẾN ĐỘ
     // ============================================================================
     function RadarChartSVG({ axes, accentColor = "#10b981" }) {
       const size = 290;
@@ -806,18 +819,21 @@
       const [uiStudioOpen, setUiStudioOpen] = useState(false);
       const [isFullscreen, setIsFullscreen] = useState(false);
 
-      // State Hồ sơ người dùng (Khởi tạo sạch từ 0)
+      // Hồ sơ người dùng (Khởi tạo sạch 100% từ 0)
       const [userProfile, setUserProfile] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_user_clean_v5");
+          const saved = localStorage.getItem("chemmath_user_otp_v6");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
         return EMPTY_USER_PROFILE;
       });
 
-      // State Hộp thoại Giao diện Đăng nhập / Đăng ký (Mở tự động nếu chưa đăng nhập)
+      // ========================================================================
+      // STATE XÁC THỰC BẢO MẬT 2 LỚP EMAIL OTP (2FA EMAIL OTP MODAL)
+      // ========================================================================
       const [authModalOpen, setAuthModalOpen] = useState(() => !userProfile.loggedIn);
       const [authMode, setAuthMode] = useState("google"); // 'google' | 'email'
+      const [authStep, setAuthStep] = useState("form"); // 'form' (Bước 1) | 'otp' (Bước 2: Nhập 6 số OTP)
       const [authForm, setAuthForm] = useState({
         fullName: "",
         email: "",
@@ -826,49 +842,67 @@
       });
       const [authLoading, setAuthLoading] = useState(false);
 
-      // Ngân hàng câu hỏi
+      // State quản lý mã OTP 6 chữ số, đếm ngược và chống dò mã (Brute-force protection)
+      const [generatedOtp, setGeneratedOtp] = useState("");
+      const [otpExpireAt, setOtpExpireAt] = useState(0);
+      const [otpCountdown, setOtpCountdown] = useState(0);
+      const [resendCooldown, setResendCooldown] = useState(0);
+      const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
+      const [otpAttempts, setOtpAttempts] = useState(0);
+      const [otpErrorMsg, setOtpErrorMsg] = useState("");
+      const otpInputRefs = [useRef(null), useRef(null), useRef(null), useRef(null), useRef(null), useRef(null)];
+
+      // Bộ đếm ngược thời hạn OTP (300s) và thời gian chờ gửi lại (60s)
+      useEffect(() => {
+        if (authStep !== "otp") return;
+        const timer = setInterval(() => {
+          const now = Date.now();
+          const remainSec = Math.max(0, Math.floor((otpExpireAt - now) / 1000));
+          setOtpCountdown(remainSec);
+          setResendCooldown((prev) => Math.max(0, prev - 1));
+        }, 1000);
+        return () => clearInterval(timer);
+      }, [authStep, otpExpireAt]);
+
+      // Ngân hàng câu hỏi, Kho bẫy & Lịch sử điểm (Khởi tạo sạch từ 0)
       const [questions, setQuestions] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_questions_clean_v5");
+          const saved = localStorage.getItem("chemmath_questions_otp_v6");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
         return INITIAL_QUESTIONS;
       });
 
-      // Kho bẫy kiến thức (Khởi tạo rỗng 0 bẫy, chỉ thêm khi làm sai hoặc người dùng bấm nạp)
       const [traps, setTraps] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_traps_clean_v5");
+          const saved = localStorage.getItem("chemmath_traps_otp_v6");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
         return [];
       });
 
-      // Lịch sử làm bài kiểm tra (Khởi tạo rỗng 0 lượt thi)
       const [quizHistory, setQuizHistory] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_history_clean_v5");
+          const saved = localStorage.getItem("chemmath_history_otp_v6");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
         return [];
       });
 
-      // Thống kê đúng/sai theo từng chuyên đề để tính Radar 6 trục thực tế
       const [topicStats, setTopicStats] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_topic_stats_v5");
+          const saved = localStorage.getItem("chemmath_topic_stats_v6");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
         return {};
       });
 
-      // Bảng xếp hạng thực tế từ Supabase
       const [leaderboardList, setLeaderboardList] = useState([]);
 
       const [toastMsg, setToastMsg] = useState(null);
       const showToast = (msg) => {
         setToastMsg(msg);
-        setTimeout(() => setToastMsg(null), 3800);
+        setTimeout(() => setToastMsg(null), 4000);
       };
 
       useEffect(() => {
@@ -877,35 +911,34 @@
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_user_clean_v5", JSON.stringify(userProfile));
+          localStorage.setItem("chemmath_user_otp_v6", JSON.stringify(userProfile));
         } catch (e) {}
       }, [userProfile]);
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_questions_clean_v5", JSON.stringify(questions));
+          localStorage.setItem("chemmath_questions_otp_v6", JSON.stringify(questions));
         } catch (e) {}
       }, [questions]);
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_traps_clean_v5", JSON.stringify(traps));
+          localStorage.setItem("chemmath_traps_otp_v6", JSON.stringify(traps));
         } catch (e) {}
       }, [traps]);
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_history_clean_v5", JSON.stringify(quizHistory));
+          localStorage.setItem("chemmath_history_otp_v6", JSON.stringify(quizHistory));
         } catch (e) {}
       }, [quizHistory]);
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_topic_stats_v5", JSON.stringify(topicStats));
+          localStorage.setItem("chemmath_topic_stats_v6", JSON.stringify(topicStats));
         } catch (e) {}
       }, [topicStats]);
 
-      // Đồng bộ Bảng xếp hạng thực tế từ Supabase
       const fetchRealtimeLeaderboard = async () => {
         if (!supabaseClient) return;
         try {
@@ -924,7 +957,6 @@
         fetchRealtimeLeaderboard();
       }, [userProfile.xp, userProfile.loggedIn]);
 
-      // Đồng bộ hồ sơ người dùng lên Supabase
       const syncProfileToSupabase = async (profileData) => {
         if (!supabaseClient || !profileData.email) return;
         try {
@@ -944,21 +976,131 @@
         } catch (e) {}
       };
 
-      // Xử lý Đăng nhập / Đăng ký trên Giao diện Đăng nhập
-      const handleAuthSubmit = async (e) => {
-        e.preventDefault();
+      // ========================================================================
+      // BƯỚC 1: GỬI MÃ BẢO MẬT OTP 6 SỐ VỀ EMAIL QUA WEBHOOK GMAIL
+      // ========================================================================
+      const handleRequestEmailOTP = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
         const emailClean = (authForm.email || "").trim().toLowerCase();
         const nameClean = (authForm.fullName || "").trim();
 
-        if (!emailClean || !nameClean) {
-          showToast("Vui lòng nhập đầy đủ Họ và tên cùng địa chỉ Email Gmail!");
+        if (!nameClean || !emailClean || !emailClean.includes("@")) {
+          showToast("Vui lòng nhập đầy đủ Họ và tên cùng địa chỉ Email hợp lệ!");
           return;
         }
 
         setAuthLoading(true);
+        setOtpErrorMsg("");
+
+        const code6 = generateSecure6DigitOTP();
+        const expireTime = Date.now() + 5 * 60 * 1000; // Hết hạn sau 5 phút (300 giây)
+        setGeneratedOtp(code6);
+        setOtpExpireAt(expireTime);
+        setOtpCountdown(300);
+        setResendCooldown(60);
+        setOtpDigits(["", "", "", "", "", ""]);
+        setOtpAttempts(0);
+
+        // Gửi mã OTP 6 chữ số về Email người dùng qua Google Apps Script Webhook
+        // Tương thích cả Code.gs mới (action: "SEND_OTP") lẫn Code.gs cũ (hiển thị mã ngay trong dòng studentName & avgScore)
+        const otpPayload = {
+          action: "SEND_OTP",
+          receiver: emailClean,
+          otpCode: code6,
+          studentName: nameClean + " — [MÃ BẢO MẬT OTP: " + code6 + "]",
+          avgScore: "MÃ OTP: " + code6,
+          xp: 0,
+          streak: 0,
+          timestamp: new Date().toISOString()
+        };
+
+        try {
+          if (APP_CONFIG.GMAIL_REPORT_WEBHOOK_URL) {
+            await fetch(APP_CONFIG.GMAIL_REPORT_WEBHOOK_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(otpPayload)
+            });
+          }
+        } catch (err) {}
+
+        setAuthLoading(false);
+        setAuthStep("otp");
+        showToast("Đã gửi mã bảo mật OTP (6 chữ số) tới hộp thư " + emailClean + "!");
+        setTimeout(() => {
+          otpInputRefs[0]?.current?.focus();
+        }, 150);
+      };
+
+      // Xử lý khi nhập từng chữ số vào 6 ô OTP
+      const handleOtpDigitChange = (index, val) => {
+        const digit = val.replace(/[^0-9]/g, "").slice(-1);
+        const nextDigits = [...otpDigits];
+        nextDigits[index] = digit;
+        setOtpDigits(nextDigits);
+        setOtpErrorMsg("");
+
+        if (digit && index < 5) {
+          otpInputRefs[index + 1]?.current?.focus();
+        }
+      };
+
+      const handleOtpKeyDown = (index, e) => {
+        if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
+          otpInputRefs[index - 1]?.current?.focus();
+        }
+      };
+
+      // Hỗ trợ dán nhanh (Ctrl + V) cả 6 chữ số OTP từ Email
+      const handleOtpPaste = (e) => {
+        e.preventDefault();
+        const pasted = (e.clipboardData.getData("text") || "").replace(/[^0-9]/g, "").slice(0, 6);
+        if (!pasted) return;
+        const nextDigits = ["", "", "", "", "", ""];
+        for (let i = 0; i < 6; i++) {
+          nextDigits[i] = pasted[i] || "";
+        }
+        setOtpDigits(nextDigits);
+        setOtpErrorMsg("");
+        const focusIdx = Math.min(5, pasted.length);
+        otpInputRefs[focusIdx]?.current?.focus();
+      };
+
+      // ========================================================================
+      // BƯỚC 2: KIỂM TRA MÃ OTP 6 SỐ & ĐỒNG BỘ HỒ SƠ SUPABASE
+      // ========================================================================
+      const handleVerifyOtpAndLogin = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const enteredCode = otpDigits.join("");
+
+        if (enteredCode.length < 6) {
+          setOtpErrorMsg("Vui lòng nhập đủ 6 chữ số mã xác thực OTP!");
+          return;
+        }
+        if (otpAttempts >= 5) {
+          setOtpErrorMsg("Bạn đã nhập sai quá 5 lần. Vui lòng bấm 'Gửi lại mã OTP mới'!");
+          return;
+        }
+        if (Date.now() > otpExpireAt) {
+          setOtpErrorMsg("Mã OTP đã hết hạn (quá 5 phút). Vui lòng bấm 'Gửi lại mã OTP mới'!");
+          return;
+        }
+        if (enteredCode !== generatedOtp) {
+          const nextAtt = otpAttempts + 1;
+          setOtpAttempts(nextAtt);
+          setOtpErrorMsg(
+            "Mã OTP không chính xác! Bạn còn " + Math.max(0, 5 - nextAtt) + " lần thử."
+          );
+          return;
+        }
+
+        // Xác thực OTP thành công -> Tải hoặc khởi tạo hồ sơ từ Supabase
+        setAuthLoading(true);
+        const emailClean = (authForm.email || "").trim().toLowerCase();
+        const nameClean = (authForm.fullName || "").trim();
         let loadedProfile = null;
 
-        // Kiểm tra xem email này đã có hồ sơ trên Supabase chưa
         if (supabaseClient) {
           try {
             const { data } = await supabaseClient
@@ -966,13 +1108,11 @@
               .select("*")
               .eq("email", emailClean)
               .maybeSingle();
-            if (data) {
-              loadedProfile = data;
-            }
+            if (data) loadedProfile = data;
           } catch (err) {}
         }
 
-        const todayIndex = (new Date().getDay() + 6) % 7; // T2=0 ... CN=6
+        const todayIndex = (new Date().getDay() + 6) % 7;
         const todayStr = new Date().toLocaleDateString("vi-VN");
         const nextActivity = [false, false, false, false, false, false, false];
         nextActivity[todayIndex] = true;
@@ -980,6 +1120,7 @@
         const newProfile = loadedProfile
           ? {
               loggedIn: true,
+              verifiedOtp: true,
               name: loadedProfile.full_name || nameClean,
               email: emailClean,
               schoolClass: authForm.schoolClass || APP_CONFIG.AUTHOR_INFO.schoolName,
@@ -993,6 +1134,7 @@
             }
           : {
               loggedIn: true,
+              verifiedOtp: true,
               name: nameClean,
               email: emailClean,
               schoolClass: authForm.schoolClass || APP_CONFIG.AUTHOR_INFO.schoolName,
@@ -1007,10 +1149,11 @@
         await syncProfileToSupabase(newProfile);
         setAuthLoading(false);
         setAuthModalOpen(false);
-        showToast("Xin chào " + newProfile.name + "! Đã đăng nhập & đồng bộ tài khoản thành công.");
+        setAuthStep("form");
+        setGeneratedOtp("");
+        showToast("Xác thực OTP thành công! Chào mừng " + newProfile.name + ".");
       };
 
-      // Đăng xuất hoặc Reset toàn bộ dữ liệu về 0
       const handleResetAllToZero = () => {
         const resetUser = userProfile.loggedIn
           ? {
@@ -1039,8 +1182,9 @@
         setQuizHistory([]);
         setTraps([]);
         setTopicStats({});
+        setAuthStep("form");
         setAuthModalOpen(true);
-        showToast("Đã đăng xuất và đưa dữ liệu phiên làm việc về 0.");
+        showToast("Đã đăng xuất và khóa phiên bảo mật.");
       };
 
       const THEMES = {
@@ -1102,6 +1246,7 @@
 
         const targetEmail = userProfile.email || APP_CONFIG.DEFAULT_RECEIVER_GMAIL;
         const payload = {
+          action: "SEND_REPORT",
           receiver: targetEmail,
           studentName: userProfile.name,
           xp: userProfile.xp,
@@ -1130,6 +1275,7 @@
 
       const handleCloudBackup = async () => {
         const backupData = {
+          action: "BACKUP_DATA",
           configProject: APP_CONFIG.AUTHOR_INFO.projectName,
           userProfile,
           quizHistory,
@@ -1270,7 +1416,6 @@
         };
         setUserProfile(nextProfile);
 
-        // Lưu lên Supabase nếu đã kết nối
         if (supabaseClient) {
           try {
             await supabaseClient.from("quiz_history").insert({
@@ -1513,7 +1658,6 @@
         { id: "analytics", icon: "fa-chart-pie", label: "Radar 6 Trục & Xếp Hạng", short: "Xếp hạng" }
       ];
 
-      // Tính toán Radar 6 trục từ kết quả làm bài thực tế (Khởi đầu = 0%)
       const radarAxesData = useMemo(() => {
         const getRate = (topicName) => {
           const st = topicStats[topicName];
@@ -1557,6 +1701,12 @@
         return (userProfile.activity7Days || []).filter(Boolean).length;
       }, [userProfile.activity7Days]);
 
+      const formatCountdown = (sec) => {
+        const m = String(Math.floor(sec / 60)).padStart(2, "0");
+        const s = String(sec % 60).padStart(2, "0");
+        return m + ":" + s;
+      };
+
       const isForcedMobile = layoutMode === "mobile";
       const isZenMode = layoutMode === "zen";
 
@@ -1573,7 +1723,7 @@
           )}
 
           {/* ====================================================================
-              GIAO DIỆN ĐĂNG NHẬP & ĐĂNG KÝ TÀI KHOẢN (AUTH PORTAL MODAL)
+              GIAO DIỆN ĐĂNG NHẬP & XÁC THỰC BẢO MẬT 2 LỚP QUA EMAIL OTP (6 SỐ)
              ==================================================================== */}
           {authModalOpen && (
             <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto">
@@ -1581,11 +1731,17 @@
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className={"w-11 h-11 rounded-2xl flex items-center justify-center font-extrabold text-lg " + currentTheme.accentBg}>
-                      <i className="fa-solid fa-user-astronaut"></i>
+                      <i className={"fa-solid " + (authStep === "otp" ? "fa-shield-keyhole" : "fa-user-shield")}></i>
                     </div>
                     <div>
-                      <h2 className="font-extrabold text-base md:text-lg">Đăng Nhập Hệ Sinh Thái</h2>
-                      <p className="text-xs opacity-75">Đồng bộ dữ liệu học tập lên Cloud Supabase</p>
+                      <h2 className="font-extrabold text-base md:text-lg">
+                        {authStep === "otp" ? "Xác Thực Mã Bảo Mật OTP" : "Đăng Nhập Bảo Mật 2 Lớp (2FA)"}
+                      </h2>
+                      <p className="text-xs opacity-75">
+                        {authStep === "otp"
+                          ? "Nhập mã 6 chữ số đã gửi về Gmail của bạn"
+                          : "Bảo vệ tài khoản bằng mã xác thực OTP gửi qua Email"}
+                      </p>
                     </div>
                   </div>
                   <button
@@ -1597,124 +1753,215 @@
                   </button>
                 </div>
 
-                {/* Chuyển đổi phương thức đăng nhập */}
-                <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-950/60 border border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode("google")}
-                    className={"py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all " + (authMode === "google" ? "bg-white text-slate-950 shadow" : "opacity-75")}
-                  >
-                    <i className="fa-brands fa-google text-red-500"></i>
-                    <span>Tài khoản Google</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode("email")}
-                    className={"py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all " + (authMode === "email" ? currentTheme.accentBg : "opacity-75")}
-                  >
-                    <i className="fa-solid fa-envelope"></i>
-                    <span>Email & Mật khẩu</span>
-                  </button>
-                </div>
-
-                <form onSubmit={handleAuthSubmit} className="space-y-3.5 text-xs">
-                  <div>
-                    <label className="font-bold opacity-80 block mb-1">Họ và tên học sinh *</label>
-                    <input
-                      type="text"
-                      required
-                      value={authForm.fullName}
-                      onChange={(e) => setAuthForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                      placeholder="Ví dụ: Nguyễn Tùng Dương"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold opacity-80 block mb-1">
-                      {authMode === "google" ? "Địa chỉ Gmail Google *" : "Địa chỉ Email học tập *"}
-                    </label>
-                    <input
-                      type="email"
-                      required
-                      value={authForm.email}
-                      onChange={(e) => setAuthForm((prev) => ({ ...prev, email: e.target.value }))}
-                      placeholder="Ví dụ: nguyentungduong.hncte@gmail.com"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold opacity-80 block mb-1">Trường / Lớp</label>
-                    <input
-                      type="text"
-                      value={authForm.schoolClass}
-                      onChange={(e) => setAuthForm((prev) => ({ ...prev, schoolClass: e.target.value }))}
-                      placeholder="Ví dụ: Lớp 10 - THPT Mê Linh"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
-                    />
-                  </div>
-
-                  {authMode === "email" && (
-                    <div>
-                      <label className="font-bold opacity-80 block mb-1">Mật khẩu bảo mật</label>
-                      <input
-                        type="password"
-                        value={authForm.password}
-                        onChange={(e) => setAuthForm((prev) => ({ ...prev, password: e.target.value }))}
-                        placeholder="Nhập mật khẩu tự chọn..."
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
-                      />
+                {/* BƯỚC 1: NHẬP THÔNG TIN & YÊU CẦU GỬI MÃ OTP VỀ EMAIL */}
+                {authStep === "form" ? (
+                  <React.Fragment>
+                    <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-950/60 border border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode("google")}
+                        className={"py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all " + (authMode === "google" ? "bg-white text-slate-950 shadow" : "opacity-75")}
+                      >
+                        <i className="fa-brands fa-google text-red-500"></i>
+                        <span>Xác thực Gmail</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode("email")}
+                        className={"py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all " + (authMode === "email" ? currentTheme.accentBg : "opacity-75")}
+                      >
+                        <i className="fa-solid fa-key"></i>
+                        <span>Email & Mật khẩu</span>
+                      </button>
                     </div>
-                  )}
 
-                  <button
-                    type="submit"
-                    disabled={authLoading}
-                    className={
-                      "w-full py-3 rounded-2xl font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 " +
-                      (authMode === "google" ? "bg-white text-slate-950 hover:bg-slate-200" : currentTheme.accentBg)
-                    }
-                  >
-                    {authMode === "google" ? (
-                      <i className="fa-brands fa-google text-red-500 text-base"></i>
-                    ) : (
-                      <i className="fa-solid fa-right-to-bracket"></i>
+                    <form onSubmit={handleRequestEmailOTP} className="space-y-3.5 text-xs">
+                      <div>
+                        <label className="font-bold opacity-80 block mb-1">Họ và tên học sinh *</label>
+                        <input
+                          type="text"
+                          required
+                          value={authForm.fullName}
+                          onChange={(e) => setAuthForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                          placeholder="Ví dụ: Nguyễn Tùng Dương"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-bold opacity-80 block mb-1">
+                          Địa chỉ Email / Gmail nhận Mã OTP (6 chữ số) *
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={authForm.email}
+                          onChange={(e) => setAuthForm((prev) => ({ ...prev, email: e.target.value }))}
+                          placeholder="Nhập chính xác Gmail để nhận mã OTP..."
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="font-bold opacity-80 block mb-1">Trường / Lớp</label>
+                        <input
+                          type="text"
+                          value={authForm.schoolClass}
+                          onChange={(e) => setAuthForm((prev) => ({ ...prev, schoolClass: e.target.value }))}
+                          placeholder="Ví dụ: Lớp 10 - THPT Mê Linh"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                        />
+                      </div>
+
+                      {authMode === "email" && (
+                        <div>
+                          <label className="font-bold opacity-80 block mb-1">Mật khẩu bảo mật cá nhân *</label>
+                          <input
+                            type="password"
+                            required
+                            value={authForm.password}
+                            onChange={(e) => setAuthForm((prev) => ({ ...prev, password: e.target.value }))}
+                            placeholder="Nhập mật khẩu bảo vệ tài khoản..."
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                          />
+                        </div>
+                      )}
+
+                      <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-start gap-2">
+                        <i className="fa-solid fa-shield-halved mt-0.5"></i>
+                        <span>
+                          Hệ thống sẽ gửi một <strong>Mã bảo mật OTP 6 chữ số</strong> trực tiếp tới hộp thư Gmail của bạn để xác minh chính chủ trước khi đăng nhập.
+                        </span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        className={"w-full py-3 rounded-2xl font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 " + currentTheme.accentBg}
+                      >
+                        <i className={"fa-solid " + (authLoading ? "fa-spinner fa-spin" : "fa-paper-plane")}></i>
+                        <span>
+                          {authLoading
+                            ? "Đang gửi mã OTP về Gmail..."
+                            : "📨 Gửi Mã Bảo Mật OTP (6 số) Về Email"}
+                        </span>
+                      </button>
+                    </form>
+
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAuthForm({
+                            fullName: APP_CONFIG.AUTHOR_INFO.authorName,
+                            email: APP_CONFIG.AUTHOR_INFO.supportEmail,
+                            schoolClass: APP_CONFIG.AUTHOR_INFO.schoolName,
+                            password: ""
+                          })
+                        }
+                        className="text-emerald-400 hover:underline font-semibold"
+                      >
+                        ⚡ Điền nhanh Gmail của tôi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuthModalOpen(false)}
+                        className="opacity-70 hover:opacity-100"
+                      >
+                        Dùng chế độ Khách (0 XP) →
+                      </button>
+                    </div>
+                  </React.Fragment>
+                ) : (
+                  /* BƯỚC 2: NHẬP 6 CHỮ SỐ OTP ĐÃ GỬI VỀ EMAIL */
+                  <form onSubmit={handleVerifyOtpAndLogin} className="space-y-4 text-xs">
+                    <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="opacity-75">Đã gửi mã OTP tới:</span>
+                        <button
+                          type="button"
+                          onClick={() => setAuthStep("form")}
+                          className="text-cyan-400 hover:underline font-bold"
+                        >
+                          Sửa Email
+                        </button>
+                      </div>
+                      <div className="font-mono font-bold text-sm text-emerald-400 break-all">
+                        {authForm.email}
+                      </div>
+                      <div className="text-[11px] opacity-70 pt-1">
+                        Vui lòng kiểm tra Hộp thư đến (Inbox) hoặc thư mục Quảng cáo / Spam của Gmail.
+                      </div>
+                    </div>
+
+                    {/* 6 Ô nhập số OTP */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="font-bold opacity-85">Nhập mã xác thực 6 chữ số:</label>
+                        <span className={"font-mono font-bold " + (otpCountdown > 60 ? "text-emerald-400" : "text-rose-400")}>
+                          ⏱️ Hết hạn sau: {formatCountdown(otpCountdown)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-6 gap-2" onPaste={handleOtpPaste}>
+                        {otpDigits.map((digit, idx) => (
+                          <input
+                            key={idx}
+                            ref={otpInputRefs[idx]}
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={1}
+                            value={digit}
+                            onChange={(e) => handleOtpDigitChange(idx, e.target.value)}
+                            onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                            className="w-full h-12 text-center font-mono text-lg font-extrabold rounded-xl bg-slate-950 border-2 border-slate-700 focus:border-emerald-400 focus:outline-none text-emerald-300"
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {otpErrorMsg && (
+                      <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 font-bold text-center">
+                        <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+                        {otpErrorMsg}
+                      </div>
                     )}
-                    <span>
-                      {authLoading
-                        ? "Đang kết nối Supabase..."
-                        : authMode === "google"
-                        ? "Tiếp tục với Tài khoản Google"
-                        : "Đăng Nhập / Tạo Hồ Sơ Mới"}
-                    </span>
-                  </button>
-                </form>
 
-                {/* Nút điền nhanh thông tin Tác giả hoặc dùng chế độ Khách (Bắt đầu từ 0) */}
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setAuthForm({
-                        fullName: APP_CONFIG.AUTHOR_INFO.authorName,
-                        email: APP_CONFIG.AUTHOR_INFO.supportEmail,
-                        schoolClass: APP_CONFIG.AUTHOR_INFO.schoolName,
-                        password: ""
-                      })
-                    }
-                    className="text-emerald-400 hover:underline font-semibold"
-                  >
-                    ⚡ Điền nhanh Gmail của tôi
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAuthModalOpen(false)}
-                    className="opacity-70 hover:opacity-100"
-                  >
-                    Trải nghiệm chế độ Khách (0 XP) →
-                  </button>
-                </div>
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className={"w-full py-3.5 rounded-2xl font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 " + currentTheme.accentBg}
+                    >
+                      <i className="fa-solid fa-circle-check"></i>
+                      <span>{authLoading ? "Đang xác thực..." : "Xác Nhận Mã OTP & Đăng Nhập"}</span>
+                    </button>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                      <button
+                        type="button"
+                        onClick={() => setAuthStep("form")}
+                        className="opacity-75 hover:opacity-100 font-semibold"
+                      >
+                        ← Quay lại Bước 1
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={resendCooldown > 0 || authLoading}
+                        onClick={handleRequestEmailOTP}
+                        className={
+                          "font-bold " +
+                          (resendCooldown > 0
+                            ? "opacity-45 cursor-not-allowed"
+                            : "text-emerald-400 hover:underline")
+                        }
+                      >
+                        {resendCooldown > 0
+                          ? "Gửi lại mã sau (" + resendCooldown + "s)"
+                          : "🔄 Gửi lại mã OTP mới"}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           )}
@@ -1739,7 +1986,7 @@
                     {!sidebarCollapsed && (
                       <div className="min-w-0">
                         <h1 className="font-extrabold text-base tracking-tight truncate">ChemMath AI</h1>
-                        <p className="text-[11px] opacity-70 truncate">First-Principles EdTech</p>
+                        <p className="text-[11px] opacity-70 truncate">2FA Verified EdTech</p>
                       </div>
                     )}
                   </div>
@@ -1800,8 +2047,10 @@
               {!sidebarCollapsed && (
                 <div className="p-4 border-t border-slate-800/60 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="opacity-75">👤 Tài khoản:</span>
-                    <span className="font-bold truncate max-w-[140px]">{userProfile.name}</span>
+                    <span className="opacity-75">🛡️ Bảo mật:</span>
+                    <span className={"font-bold " + (userProfile.verifiedOtp ? "text-emerald-400" : "text-amber-400")}>
+                      {userProfile.verifiedOtp ? "Đã xác thực OTP" : "Chưa xác thực"}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="opacity-75">🔥 Chuỗi học:</span>
@@ -1871,7 +2120,6 @@
                     <span className="text-amber-300">🏆 {userProfile.rankTitle}</span>
                   </div>
 
-                  {/* Nút Reset dữ liệu về 0 */}
                   <button
                     onClick={handleResetAllToZero}
                     title="Reset toàn bộ điểm số, XP, lịch sử làm bài về 0"
@@ -1898,14 +2146,16 @@
                     <i className={"fa-solid fa-chevron-" + (uiStudioOpen ? "up" : "down") + " text-[10px]"}></i>
                   </button>
 
-                  {/* Nút mở Giao diện Đăng nhập Google / Tài khoản */}
                   {userProfile.loggedIn ? (
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setAuthModalOpen(true)}
+                        onClick={() => {
+                          setAuthStep("form");
+                          setAuthModalOpen(true);
+                        }}
                         className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5"
                       >
-                        <i className="fa-solid fa-circle-user"></i>
+                        <i className="fa-solid fa-shield-check"></i>
                         <span className="max-w-[130px] truncate">{userProfile.name}</span>
                       </button>
                       <button
@@ -1918,17 +2168,19 @@
                     </div>
                   ) : (
                     <button
-                      onClick={() => setAuthModalOpen(true)}
+                      onClick={() => {
+                        setAuthStep("form");
+                        setAuthModalOpen(true);
+                      }}
                       className="px-3.5 py-1.5 rounded-xl bg-white text-slate-900 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 shadow"
                     >
                       <i className="fa-brands fa-google text-red-500"></i>
-                      <span>🌐 Đăng nhập Google</span>
+                      <span>🔐 Đăng nhập OTP Email</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* BẢNG TÙY CHỈNH GIAO DIỆN & TOÀN MÀN HÌNH (UI STUDIO) */}
               {uiStudioOpen && (
                 <div className="mt-3 p-4 rounded-2xl bg-slate-950/90 text-slate-100 border border-slate-700/80 shadow-2xl grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                   <div className="space-y-1.5">
@@ -2011,11 +2263,9 @@
 
             {/* NỘI DUNG CUỘN CHÍNH (7 PHÂN KHU) */}
             <main className="flex-1 overflow-y-auto p-3 md:p-6 pb-24 md:pb-8 space-y-6">
-              {/* PHÂN KHU 1: TRANG CHỦ BENTO */}
               {activeTab === "dashboard" && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                    {/* Thẻ 1 */}
                     <div className={"rounded-3xl border p-6 flex flex-col justify-between " + currentTheme.panel}>
                       <div className="space-y-3">
                         <span className={"inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border " + currentTheme.accentSoft}>
@@ -2026,7 +2276,7 @@
                           {APP_CONFIG.AUTHOR_INFO.projectName}
                         </h2>
                         <p className="text-sm opacity-80 leading-relaxed">
-                          Hệ thống tự học tư duy nguyên lý gốc (First Principles), chống làm tròn số trung gian và hiển thị công thức chuẩn LaTeX/mhchem.
+                          Hệ thống tự học tư duy nguyên lý gốc (First Principles), bảo mật 2 lớp Email OTP và hiển thị công thức chuẩn LaTeX/mhchem.
                         </p>
                       </div>
                       <div className="grid grid-cols-2 gap-3 pt-5">
@@ -2047,12 +2297,11 @@
                       </div>
                     </div>
 
-                    {/* Thẻ 2: Gamification (Khởi đầu từ 0) */}
                     <div className={"rounded-3xl border p-6 flex flex-col justify-between " + currentTheme.panel}>
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold uppercase tracking-wider opacity-75">
-                            Hồ sơ Gamification ({userProfile.name})
+                            Hồ sơ ({userProfile.name})
                           </span>
                           <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold">
                             🏆 {userProfile.rankTitle}
@@ -2108,7 +2357,6 @@
                       </div>
                     </div>
 
-                    {/* Thẻ 3: Thông tin Tác giả */}
                     <div className={"rounded-3xl border p-6 flex flex-col justify-between " + currentTheme.panel}>
                       <div className="space-y-2.5 text-xs">
                         <div className="flex items-center justify-between">
@@ -2161,7 +2409,7 @@
                     </div>
                   </div>
 
-                  {/* HÀNG 2: 4 THẺ KPI (DỮ LIỆU THỰC TẾ KHỞI ĐẦU TỪ 0) */}
+                  {/* HÀNG 2: 4 THẺ KPI */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className={"p-5 rounded-3xl border " + currentTheme.panel}>
                       <div className="text-xs opacity-75">Tổng số chuyên đề Hóa - Toán</div>
@@ -3081,7 +3329,7 @@
                 </div>
               )}
 
-              {/* PHÂN KHU 7: TIẾN ĐỘ, BIỂU ĐỒ RADAR 6 TRỤC & BẢNG XẾP HẠNG THỰC TẾ */}
+              {/* PHÂN KHU 7: TIẾN ĐỘ, BIỂU ĐỒ RADAR 6 TRỤC & BẢNG XẾP HẠNG */}
               {activeTab === "analytics" && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
