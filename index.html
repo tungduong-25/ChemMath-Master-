@@ -37,7 +37,7 @@
   <!-- Supabase JS SDK CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- React 18 & ReactDOM 18 CDN (jsdelivr chuẩn tốc độ cao) -->
+  <!-- React 18 & ReactDOM 18 CDN -->
   <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
 
@@ -111,7 +111,7 @@
       GOOGLE_OAUTH_CLIENT_ID: "ĐIỀN_GOOGLE_CLIENT_ID_TẠI_ĐÂY",
       GMAIL_REPORT_WEBHOOK_URL: "https://script.google.com/macros/s/AKfycby_EvwWW4raIUAUmwsMEG4eM5JD44zSbnTXP0vAkGLkjcS4e786T5EbPkh43GXn97UQaw/exec",
       GOOGLE_SHEETS_SYNC_WEBHOOK_URL: "https://script.google.com/macros/s/AKfycby_EvwWW4raIUAUmwsMEG4eM5JD44zSbnTXP0vAkGLkjcS4e786T5EbPkh43GXn97UQaw/exec",
-      DEFAULT_RECEIVER_GMAIL: "email_nhan_bao_cao@gmail.com",
+      DEFAULT_RECEIVER_GMAIL: "nguyentungduong.hncte@gmail.com",
       AUTHOR_INFO: {
         projectName: "ChemMath AI Master - Trợ lý Hóa học & Toán học KHTN",
         authorName: "Nguyễn Tùng Dương",
@@ -119,6 +119,44 @@
         supportEmail: "nguyentungduong.hncte@gmail.com",
         hotline: "(+84) 098 217 0830"
       }
+    };
+
+    // Xóa sạch dữ liệu mẫu cũ lưu trong trình duyệt từ các bản trước
+    try {
+      ["chemmath_user_v2", "chemmath_history_v2", "chemmath_traps_v2", "chemmath_user_v3", "chemmath_history_v3", "chemmath_traps_v3"].forEach((k) => {
+        localStorage.removeItem(k);
+      });
+    } catch (e) {}
+
+    // Khởi tạo Supabase Client an toàn
+    let supabaseClient = null;
+    try {
+      if (window.supabase && APP_CONFIG.SUPABASE_URL && APP_CONFIG.SUPABASE_ANON_KEY) {
+        supabaseClient = window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
+      }
+    } catch (e) {}
+
+    // Hàm tính Hạng (Rank) tự động theo XP thực tế
+    function computeRankByXP(xpVal) {
+      const xp = Number(xpVal || 0);
+      if (xp >= 1500) return "Bậc Thầy Phân Tử";
+      if (xp >= 800) return "Kiến Trúc Sư Giải Tích";
+      if (xp >= 400) return "Chiến Binh Lượng Tử";
+      if (xp >= 100) return "Học Giả Nguyên Tử";
+      return "Tân Binh KHTN";
+    }
+
+    // Trạng thái người dùng khởi đầu từ 0 hoàn toàn
+    const EMPTY_USER_PROFILE = {
+      loggedIn: false,
+      name: "Khách (Chưa đăng nhập)",
+      email: "",
+      schoolClass: "THPT Mê Linh",
+      xp: 0,
+      streak: 0,
+      lastStudyDate: "",
+      rankTitle: "Tân Binh KHTN",
+      activity7Days: [false, false, false, false, false, false, false]
     };
 
     // ============================================================================
@@ -138,19 +176,17 @@
     const { useState, useEffect, useMemo } = React;
 
     // ============================================================================
-    // 3. BỘ DỰNG CÔNG THỨC MathChemText KHÔNG BAO GIỜ LỖI (TƯƠNG THÍCH MỌI TRÌNH DUYỆT)
+    // 3. BỘ DỰNG CÔNG THỨC MathChemText KHÔNG BAO GIỜ LỖI
     // ============================================================================
     function sanitizeLatexInput(raw) {
       if (raw === null || raw === undefined) return "";
       let str = String(raw);
-      // Khôi phục các ký tự thoát bị nuốt trong JSON (\t -> \text, \f -> \frac, \r -> \rightarrow, \b -> \beta)
       str = str
         .replace(/\t(?=[a-zA-Z])/g, "\\t")
         .replace(/\f(?=[a-zA-Z])/g, "\\f")
         .replace(/\r(?=[a-zA-Z])/g, "\\r")
         .replace(/\x08(?=[a-zA-Z])/g, "\\b");
 
-      // Kiểm tra và tự động đóng dấu $ bị lẻ (không dùng regex lookbehind để tương thích tuyệt đối với Babel)
       const withoutDouble = str.split("$$").join("");
       const singleCount = withoutDouble.split("$").length - 1;
       if (singleCount % 2 !== 0) {
@@ -434,10 +470,8 @@
       }
     ];
 
-    // ============================================================================
-    // 5. KHO BẪY KIẾN THỨC MẶC ĐỊNH (MISTAKE VAULT & SPACED REPETITION)
-    // ============================================================================
-    const INITIAL_TRAPS = [
+    // Bộ bẫy tham khảo (chỉ nạp khi người dùng chủ động bấm nút "Tải bộ Bẫy lý thuyết mẫu")
+    const REFERENCE_TRAPS = [
       {
         id: "TRAP_CHEM_1",
         subject: "chemistry",
@@ -445,7 +479,7 @@
         topic: "Phản ứng Oxi hóa - Khử & Điện hóa",
         wrongHabit: "Chỉ tính $\\text{Fe}^{+2} \\rightarrow \\text{Fe}^{+3} + 1\\text{e}$ hoặc quên nhân 2 nguyên tử Carbon trong $\\text{C}_2\\text{O}_4^{2-}$.",
         correctPrinciple: "Bán phản ứng chuẩn: $2\\text{FeC}_2\\text{O}_4 \\rightarrow 2\\text{Fe}^{3+} + 4\\text{CO}_2 + 6\\text{e}$ (mỗi mol $\\text{FeC}_2\\text{O}_4$ nhường $3\\text{ mol e}$). Với $0,2\\text{ mol}$ $\\text{FeC}_2\\text{O}_4$ thì $n_e = 0,6\\text{ mol}$.",
-        mastery: 65,
+        mastery: 0,
         nextReview: "Hôm nay"
       },
       {
@@ -455,8 +489,8 @@
         topic: "Hợp chất Hữu cơ & Phổ phân tử (IR/MS)",
         wrongHabit: "Cộng trực tiếp $M_{\\text{Catechin}} + 17 = 290 + 17 = 307\\text{ g/mol}$.",
         correctPrinciple: "Gắn thêm 1 nhóm $-\\text{OH}$ ($17\\text{ đvC}$) vào vòng thơm là thay thế 1 nguyên tử $\\text{H}$ ($1\\text{ đvC}$), nên phân tử khối chỉ tăng $+16\\text{ đvC}$ thành $M = 290 + 16 = 306\\text{ g/mol}$.",
-        mastery: 80,
-        nextReview: "Ngày mai"
+        mastery: 0,
+        nextReview: "Hôm nay"
       },
       {
         id: "TRAP_CHEM_3",
@@ -465,33 +499,13 @@
         topic: "Nhiệt hóa học & Năng lượng",
         wrongHabit: "Làm tròn $n_{\\text{ethanol}} = \\frac{40}{46} \\approx 0,87\\text{ mol}$ và $n_{\\text{octane}} = \\frac{665}{114} \\approx 5,83\\text{ mol}$ trước khi nhân nhiệt đốt cháy.",
         correctPrinciple: "Giữ nguyên phân số trung gian $n_{\\text{ethanol}} = \\frac{40}{46}\\text{ mol}$ và $n_{\\text{octane}} = \\frac{665}{114}\\text{ mol}$, chỉ làm tròn duy nhất ở kết quả cuối cùng ($Q \\approx 33,1\\text{ MJ}$).",
-        mastery: 50,
-        nextReview: "Hôm nay"
-      },
-      {
-        id: "TRAP_MATH_1",
-        subject: "math",
-        title: "Bẫy đưa số mũ ở cơ số Lôgarit ra ngoài không nghịch đảo",
-        topic: "Hàm số Mũ & Lôgarit",
-        wrongHabit: "Viết $\\log_{a^k} b = k \\log_a b$ dẫn đến tính $\\log_{\\sqrt{a}} b = \\frac{1}{2}\\log_a b$.",
-        correctPrinciple: "Công thức chuẩn: $\\log_{a^k} b = \\frac{1}{k}\\log_a b$. Với $\\sqrt{a} = a^{1/2}$ thì $\\log_{\\sqrt{a}} b = 2\\log_a b$.",
-        mastery: 75,
-        nextReview: "2 ngày tới"
-      },
-      {
-        id: "TRAP_MATH_2",
-        subject: "math",
-        title: "Bẫy quên chia chu kỳ k2π khi giải phương trình sin(ax + b) = c",
-        topic: "Hàm số Lượng giác & Phương trình Lượng giác",
-        wrongHabit: "Từ $2x - \\frac{\\pi}{4} = \\frac{\\pi}{4} + k2\\pi$ suy ra $x = \\frac{\\pi}{4} + k2\\pi$ (quên chia 2 cho $k2\\pi$).",
-        correctPrinciple: "Khi chia hai vế cho hệ số $a$, phải chia cả chu kỳ: $x = \\frac{\\pi}{4} + k\\pi$ ($k \\in \\mathbb{Z}$), từ đó đếm đúng số nghiệm trên đoạn.",
-        mastery: 70,
+        mastery: 0,
         nextReview: "Hôm nay"
       }
     ];
 
     // ============================================================================
-    // 6. ĐỀ MẪU TRỢ LÝ AI & BỘ GIẢI NGUYÊN LÝ GỐC TỨC THÌ (FIRST-PRINCIPLES SOLVER)
+    // 5. ĐỀ MẪU TRỢ LÝ AI & BỘ GIẢI NGUYÊN LÝ GỐC TỨC THÌ
     // ============================================================================
     const SAMPLE_AI_PROBLEMS = [
       {
@@ -600,7 +614,7 @@
     }
 
     // ============================================================================
-    // 7. BIỂU ĐỒ SVG ĐỘNG: RADAR 6 TRỤC & AREA CHART TIẾN ĐỘ
+    // 6. BIỂU ĐỒ SVG ĐỘNG: RADAR 6 TRỤC & AREA CHART TIẾN ĐỘ (TỪ DỮ LIỆU THẬT)
     // ============================================================================
     function RadarChartSVG({ axes, accentColor = "#10b981" }) {
       const size = 290;
@@ -617,7 +631,7 @@
 
       const polygonPoints = axes
         .map((axis, idx) => {
-          const p = getPoint(idx, Math.max(0.08, Math.min(1, axis.value / 100)));
+          const p = getPoint(idx, Math.max(0.04, Math.min(1, axis.value / 100)));
           return p.x + "," + p.y;
         })
         .join(" ");
@@ -676,7 +690,7 @@
             strokeWidth="2.4"
           />
           {axes.map((axis, idx) => {
-            const p = getPoint(idx, Math.max(0.08, Math.min(1, axis.value / 100)));
+            const p = getPoint(idx, Math.max(0.04, Math.min(1, axis.value / 100)));
             return (
               <circle
                 key={idx}
@@ -703,16 +717,19 @@
       const plotW = width - padLeft - padRight;
       const plotH = height - padTop - padBottom;
 
-      const data = history && history.length > 0
-        ? history.slice(-8)
-        : [
-            { label: "Lần 1", score: 6.8 },
-            { label: "Lần 2", score: 7.4 },
-            { label: "Lần 3", score: 7.9 },
-            { label: "Lần 4", score: 8.5 },
-            { label: "Lần 5", score: 9.2 }
-          ];
+      if (!history || history.length === 0) {
+        return (
+          <div className="h-48 flex flex-col items-center justify-center border border-dashed border-slate-700/70 rounded-2xl p-4 text-center">
+            <i className="fa-solid fa-chart-line text-2xl opacity-40 mb-2"></i>
+            <p className="text-xs font-bold opacity-80">Chưa có dữ liệu lịch sử điểm số (0 lượt làm bài)</p>
+            <p className="text-[11px] opacity-60 mt-1">
+              Hãy hoàn thành bài kiểm tra đầu tiên tại Phòng Thi để hệ thống vẽ biểu đồ tiến độ thực tế của bạn.
+            </p>
+          </div>
+        );
+      }
 
+      const data = history.slice(-8);
       const points = data.map((d, idx) => {
         const x = padLeft + (data.length === 1 ? plotW / 2 : (idx / (data.length - 1)) * plotW);
         const y = padTop + plotH - (Math.max(0, Math.min(10, d.score)) / 10) * plotH;
@@ -759,7 +776,7 @@
               </g>
             );
           })}
-          <path d={areaPath} fill="url(#scoreGrad)" />
+          {data.length > 1 && <path d={areaPath} fill="url(#scoreGrad)" />}
           <path d={linePath} fill="none" stroke={accentColor} strokeWidth="2.8" strokeLinecap="round" />
           {points.map((p, idx) => (
             <g key={idx}>
@@ -777,7 +794,7 @@
     }
 
     // ============================================================================
-    // 8. ỨNG DỤNG CHÍNH (CHEMMATH AI MASTER)
+    // 7. ỨNG DỤNG CHÍNH (CHEMMATH AI MASTER)
     // ============================================================================
     function App() {
       const [activeSubject, setActiveSubject] = useState("chemistry");
@@ -789,50 +806,64 @@
       const [uiStudioOpen, setUiStudioOpen] = useState(false);
       const [isFullscreen, setIsFullscreen] = useState(false);
 
+      // State Hồ sơ người dùng (Khởi tạo sạch từ 0)
       const [userProfile, setUserProfile] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_user_v3");
+          const saved = localStorage.getItem("chemmath_user_clean_v5");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
-        return {
-          loggedIn: false,
-          name: "Học sinh KHTN",
-          email: APP_CONFIG.DEFAULT_RECEIVER_GMAIL,
-          xp: 2850,
-          streak: 14,
-          rankTitle: "Bậc Thầy Phân Tử",
-          activity7Days: [true, true, true, true, true, true, true]
-        };
+        return EMPTY_USER_PROFILE;
       });
 
+      // State Hộp thoại Giao diện Đăng nhập / Đăng ký (Mở tự động nếu chưa đăng nhập)
+      const [authModalOpen, setAuthModalOpen] = useState(() => !userProfile.loggedIn);
+      const [authMode, setAuthMode] = useState("google"); // 'google' | 'email'
+      const [authForm, setAuthForm] = useState({
+        fullName: "",
+        email: "",
+        schoolClass: "THPT Mê Linh",
+        password: ""
+      });
+      const [authLoading, setAuthLoading] = useState(false);
+
+      // Ngân hàng câu hỏi
       const [questions, setQuestions] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_questions_v3");
+          const saved = localStorage.getItem("chemmath_questions_clean_v5");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
         return INITIAL_QUESTIONS;
       });
 
+      // Kho bẫy kiến thức (Khởi tạo rỗng 0 bẫy, chỉ thêm khi làm sai hoặc người dùng bấm nạp)
       const [traps, setTraps] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_traps_v3");
+          const saved = localStorage.getItem("chemmath_traps_clean_v5");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
-        return INITIAL_TRAPS;
+        return [];
       });
 
+      // Lịch sử làm bài kiểm tra (Khởi tạo rỗng 0 lượt thi)
       const [quizHistory, setQuizHistory] = useState(() => {
         try {
-          const saved = localStorage.getItem("chemmath_history_v3");
+          const saved = localStorage.getItem("chemmath_history_clean_v5");
           if (saved) return JSON.parse(saved);
         } catch (e) {}
-        return [
-          { label: "Đề #1", score: 7.5, subject: "chemistry", date: "01/11" },
-          { label: "Đề #2", score: 8.2, subject: "math", date: "02/11" },
-          { label: "Đề #3", score: 8.8, subject: "chemistry", date: "03/11" },
-          { label: "Đề #4", score: 9.4, subject: "chemistry", date: "04/11" }
-        ];
+        return [];
       });
+
+      // Thống kê đúng/sai theo từng chuyên đề để tính Radar 6 trục thực tế
+      const [topicStats, setTopicStats] = useState(() => {
+        try {
+          const saved = localStorage.getItem("chemmath_topic_stats_v5");
+          if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return {};
+      });
+
+      // Bảng xếp hạng thực tế từ Supabase
+      const [leaderboardList, setLeaderboardList] = useState([]);
 
       const [toastMsg, setToastMsg] = useState(null);
       const showToast = (msg) => {
@@ -846,27 +877,171 @@
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_user_v3", JSON.stringify(userProfile));
+          localStorage.setItem("chemmath_user_clean_v5", JSON.stringify(userProfile));
         } catch (e) {}
       }, [userProfile]);
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_questions_v3", JSON.stringify(questions));
+          localStorage.setItem("chemmath_questions_clean_v5", JSON.stringify(questions));
         } catch (e) {}
       }, [questions]);
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_traps_v3", JSON.stringify(traps));
+          localStorage.setItem("chemmath_traps_clean_v5", JSON.stringify(traps));
         } catch (e) {}
       }, [traps]);
 
       useEffect(() => {
         try {
-          localStorage.setItem("chemmath_history_v3", JSON.stringify(quizHistory));
+          localStorage.setItem("chemmath_history_clean_v5", JSON.stringify(quizHistory));
         } catch (e) {}
       }, [quizHistory]);
+
+      useEffect(() => {
+        try {
+          localStorage.setItem("chemmath_topic_stats_v5", JSON.stringify(topicStats));
+        } catch (e) {}
+      }, [topicStats]);
+
+      // Đồng bộ Bảng xếp hạng thực tế từ Supabase
+      const fetchRealtimeLeaderboard = async () => {
+        if (!supabaseClient) return;
+        try {
+          const { data, error } = await supabaseClient
+            .from("profiles")
+            .select("email, full_name, xp, streak, rank_title")
+            .order("xp", { ascending: false })
+            .limit(15);
+          if (!error && Array.isArray(data)) {
+            setLeaderboardList(data);
+          }
+        } catch (e) {}
+      };
+
+      useEffect(() => {
+        fetchRealtimeLeaderboard();
+      }, [userProfile.xp, userProfile.loggedIn]);
+
+      // Đồng bộ hồ sơ người dùng lên Supabase
+      const syncProfileToSupabase = async (profileData) => {
+        if (!supabaseClient || !profileData.email) return;
+        try {
+          await supabaseClient.from("profiles").upsert(
+            {
+              email: profileData.email,
+              full_name: profileData.name,
+              xp: profileData.xp,
+              streak: profileData.streak,
+              rank_title: profileData.rankTitle,
+              activity_7days: profileData.activity7Days,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: "email" }
+          );
+          fetchRealtimeLeaderboard();
+        } catch (e) {}
+      };
+
+      // Xử lý Đăng nhập / Đăng ký trên Giao diện Đăng nhập
+      const handleAuthSubmit = async (e) => {
+        e.preventDefault();
+        const emailClean = (authForm.email || "").trim().toLowerCase();
+        const nameClean = (authForm.fullName || "").trim();
+
+        if (!emailClean || !nameClean) {
+          showToast("Vui lòng nhập đầy đủ Họ và tên cùng địa chỉ Email Gmail!");
+          return;
+        }
+
+        setAuthLoading(true);
+        let loadedProfile = null;
+
+        // Kiểm tra xem email này đã có hồ sơ trên Supabase chưa
+        if (supabaseClient) {
+          try {
+            const { data } = await supabaseClient
+              .from("profiles")
+              .select("*")
+              .eq("email", emailClean)
+              .maybeSingle();
+            if (data) {
+              loadedProfile = data;
+            }
+          } catch (err) {}
+        }
+
+        const todayIndex = (new Date().getDay() + 6) % 7; // T2=0 ... CN=6
+        const todayStr = new Date().toLocaleDateString("vi-VN");
+        const nextActivity = [false, false, false, false, false, false, false];
+        nextActivity[todayIndex] = true;
+
+        const newProfile = loadedProfile
+          ? {
+              loggedIn: true,
+              name: loadedProfile.full_name || nameClean,
+              email: emailClean,
+              schoolClass: authForm.schoolClass || APP_CONFIG.AUTHOR_INFO.schoolName,
+              xp: Number(loadedProfile.xp || 0),
+              streak: Math.max(1, Number(loadedProfile.streak || 1)),
+              lastStudyDate: todayStr,
+              rankTitle: computeRankByXP(loadedProfile.xp || 0),
+              activity7Days: Array.isArray(loadedProfile.activity_7days)
+                ? loadedProfile.activity_7days
+                : nextActivity
+            }
+          : {
+              loggedIn: true,
+              name: nameClean,
+              email: emailClean,
+              schoolClass: authForm.schoolClass || APP_CONFIG.AUTHOR_INFO.schoolName,
+              xp: 0,
+              streak: 1,
+              lastStudyDate: todayStr,
+              rankTitle: "Tân Binh KHTN",
+              activity7Days: nextActivity
+            };
+
+        setUserProfile(newProfile);
+        await syncProfileToSupabase(newProfile);
+        setAuthLoading(false);
+        setAuthModalOpen(false);
+        showToast("Xin chào " + newProfile.name + "! Đã đăng nhập & đồng bộ tài khoản thành công.");
+      };
+
+      // Đăng xuất hoặc Reset toàn bộ dữ liệu về 0
+      const handleResetAllToZero = () => {
+        const resetUser = userProfile.loggedIn
+          ? {
+              ...userProfile,
+              xp: 0,
+              streak: 0,
+              rankTitle: "Tân Binh KHTN",
+              activity7Days: [false, false, false, false, false, false, false]
+            }
+          : EMPTY_USER_PROFILE;
+
+        setUserProfile(resetUser);
+        setQuizHistory([]);
+        setTraps([]);
+        setTopicStats({});
+        setUserAnswers({});
+        setQuizSubmitted(false);
+        if (resetUser.loggedIn && resetUser.email) {
+          syncProfileToSupabase(resetUser);
+        }
+        showToast("Đã Reset toàn bộ điểm số, XP, chuỗi ngày học, lịch sử thi và kho bẫy về 0!");
+      };
+
+      const handleLogout = () => {
+        setUserProfile(EMPTY_USER_PROFILE);
+        setQuizHistory([]);
+        setTraps([]);
+        setTopicStats({});
+        setAuthModalOpen(true);
+        showToast("Đã đăng xuất và đưa dữ liệu phiên làm việc về 0.");
+      };
 
       const THEMES = {
         emerald: {
@@ -916,40 +1091,18 @@
         }
       };
 
-      const handleGoogleLogin = async () => {
-        if (userProfile.loggedIn) {
-          setUserProfile((prev) => ({ ...prev, loggedIn: false, name: "Học sinh KHTN" }));
-          showToast("Đã đăng xuất khỏi phiên Google.");
-          return;
-        }
-        try {
-          if (
-            window.supabase &&
-            APP_CONFIG.SUPABASE_URL.startsWith("http") &&
-            !APP_CONFIG.SUPABASE_ANON_KEY.includes("ĐIỀN_")
-          ) {
-            const sb = window.supabase.createClient(APP_CONFIG.SUPABASE_URL, APP_CONFIG.SUPABASE_ANON_KEY);
-            await sb.auth.signInWithOAuth({ provider: "google" });
-          }
-        } catch (err) {}
-        setUserProfile((prev) => ({
-          ...prev,
-          loggedIn: true,
-          name: APP_CONFIG.AUTHOR_INFO.authorName !== "Tên Tác Giả" ? APP_CONFIG.AUTHOR_INFO.authorName : "Học sinh Google KHTN",
-          email: APP_CONFIG.AUTHOR_INFO.supportEmail,
-          xp: prev.xp + 50
-        }));
-        showToast("Đã kết nối tài khoản Google & đồng bộ hồ sơ học tập (+50 XP)!");
-      };
-
       const handleSendGmailReport = async () => {
-        const avg = (
-          quizHistory.reduce((acc, item) => acc + Number(item.score || 0), 0) /
-          Math.max(1, quizHistory.length)
-        ).toFixed(2);
+        const avg =
+          quizHistory.length === 0
+            ? "0.0"
+            : (
+                quizHistory.reduce((acc, item) => acc + Number(item.score || 0), 0) /
+                quizHistory.length
+              ).toFixed(2);
 
+        const targetEmail = userProfile.email || APP_CONFIG.DEFAULT_RECEIVER_GMAIL;
         const payload = {
-          receiver: APP_CONFIG.DEFAULT_RECEIVER_GMAIL,
+          receiver: targetEmail,
           studentName: userProfile.name,
           xp: userProfile.xp,
           streak: userProfile.streak,
@@ -968,11 +1121,11 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload)
             });
-            showToast("Đã gửi báo cáo kết quả học tập tới " + APP_CONFIG.DEFAULT_RECEIVER_GMAIL + "!");
+            showToast("Đã gửi báo cáo kết quả học tập tới " + targetEmail + "!");
             return;
           } catch (e) {}
         }
-        showToast("Đã tạo bản tổng hợp kết quả học tập (Điểm TB: " + avg + "/10) gửi tới " + APP_CONFIG.DEFAULT_RECEIVER_GMAIL + "!");
+        showToast("Đã gửi báo cáo (Điểm TB: " + avg + "/10) tới " + targetEmail + "!");
       };
 
       const handleCloudBackup = async () => {
@@ -1003,7 +1156,7 @@
         a.download = "ChemMath_Backup_" + Date.now() + ".json";
         a.click();
         URL.revokeObjectURL(url);
-        showToast("Đã đồng bộ Cloud & tải tệp sao lưu dữ liệu học tập!");
+        showToast("Đã đồng bộ Google Sheets & tải tệp sao lưu dữ liệu học tập!");
       };
 
       // ========================================================================
@@ -1051,13 +1204,20 @@
         return false;
       };
 
-      const handleSubmitQuiz = () => {
+      const handleSubmitQuiz = async () => {
         if (filteredQuizQuestions.length === 0) return;
         let correctCount = 0;
         const newlyTrapped = [];
+        const updatedTopicStats = { ...topicStats };
 
         filteredQuizQuestions.forEach((q) => {
           const ok = isQuestionCorrect(q, userAnswers[q.id]);
+          const prevStat = updatedTopicStats[q.topic] || { correct: 0, total: 0 };
+          updatedTopicStats[q.topic] = {
+            correct: prevStat.correct + (ok ? 1 : 0),
+            total: prevStat.total + 1
+          };
+
           if (ok) {
             correctCount += 1;
           } else {
@@ -1068,23 +1228,24 @@
               topic: q.topic,
               wrongHabit: q.trapNote || "Nhầm lẫn bước biến đổi hoặc hệ số cân bằng.",
               correctPrinciple: q.explanation,
-              mastery: 35,
+              mastery: 25,
               nextReview: "Hôm nay"
             });
           }
         });
 
+        setTopicStats(updatedTopicStats);
+
         const score10 = Number(((correctCount / filteredQuizQuestions.length) * 10).toFixed(1));
+        const newEntry = {
+          label: "Đề #" + (quizHistory.length + 1),
+          score: score10,
+          subject: activeSubject,
+          date: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
+        };
+
         setQuizSubmitted(true);
-        setQuizHistory((prev) => [
-          ...prev,
-          {
-            label: "Đề #" + (prev.length + 1),
-            score: score10,
-            subject: activeSubject,
-            date: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
-          }
-        ]);
+        setQuizHistory((prev) => [...prev, newEntry]);
 
         if (newlyTrapped.length > 0) {
           setTraps((prev) => {
@@ -1094,11 +1255,37 @@
           });
         }
 
-        setUserProfile((prev) => ({
-          ...prev,
-          xp: prev.xp + correctCount * 30 + 20
-        }));
-        showToast("Đã chấm bài! Điểm số: " + score10 + "/10 (+" + (correctCount * 30 + 20) + " XP)");
+        const earnedXp = correctCount * 30;
+        const todayIndex = (new Date().getDay() + 6) % 7;
+        const nextAct = [...(userProfile.activity7Days || [false, false, false, false, false, false, false])];
+        nextAct[todayIndex] = true;
+
+        const nextXp = userProfile.xp + earnedXp;
+        const nextProfile = {
+          ...userProfile,
+          xp: nextXp,
+          streak: Math.max(1, userProfile.streak),
+          rankTitle: computeRankByXP(nextXp),
+          activity7Days: nextAct
+        };
+        setUserProfile(nextProfile);
+
+        // Lưu lên Supabase nếu đã kết nối
+        if (supabaseClient) {
+          try {
+            await supabaseClient.from("quiz_history").insert({
+              student_email: userProfile.email || "guest@khtn.edu.vn",
+              student_name: userProfile.name,
+              label: newEntry.label,
+              subject: activeSubject,
+              score: score10,
+              quiz_date: newEntry.date
+            });
+            await syncProfileToSupabase(nextProfile);
+          } catch (e) {}
+        }
+
+        showToast("Đã chấm bài! Điểm số: " + score10 + "/10 (+" + earnedXp + " XP)");
       };
 
       const handleResetQuiz = () => {
@@ -1109,7 +1296,7 @@
       };
 
       // ========================================================================
-      // STATE TRỢ LÝ AI GIẢI BÀI TẬP & QUÉT ĐỀ (GEMINI FIRST-PRINCIPLES)
+      // STATE TRỢ LÝ AI GIẢI BÀI TẬP & QUÉT ĐỀ
       // ========================================================================
       const [aiPrompt, setAiPrompt] = useState(SAMPLE_AI_PROBLEMS[0].prompt);
       const [aiImageBase64, setAiImageBase64] = useState(null);
@@ -1176,7 +1363,6 @@
             if (replyText) {
               setAiSolution(replyText);
               setAiLoading(false);
-              setUserProfile((prev) => ({ ...prev, xp: prev.xp + 25 }));
               return;
             }
           } catch (error) {}
@@ -1185,12 +1371,11 @@
         setTimeout(() => {
           setAiSolution(buildLocalFirstPrinciplesSolution(aiPrompt));
           setAiLoading(false);
-          setUserProfile((prev) => ({ ...prev, xp: prev.xp + 20 }));
         }, 400);
       };
 
       // ========================================================================
-      // STATE SỔ TAY TRA CỨU TƯƠNG TÁC (MÁY MÔ PHỎNG PHỔ IR 1500 - 3600 cm^-1)
+      // STATE SỔ TAY TRA CỨU TƯƠNG TÁC (PHỔ IR 1500 - 3600 cm^-1)
       // ========================================================================
       const [irWaveNumber, setIrWaveNumber] = useState(1700);
       const irAnalysis = useMemo(() => {
@@ -1328,38 +1513,49 @@
         { id: "analytics", icon: "fa-chart-pie", label: "Radar 6 Trục & Xếp Hạng", short: "Xếp hạng" }
       ];
 
+      // Tính toán Radar 6 trục từ kết quả làm bài thực tế (Khởi đầu = 0%)
       const radarAxesData = useMemo(() => {
+        const getRate = (topicName) => {
+          const st = topicStats[topicName];
+          if (!st || !st.total) return 0;
+          return Math.round((st.correct / st.total) * 100);
+        };
+
         if (activeSubject === "chemistry") {
           return [
-            { shortLabel: "Oxi hóa-Khử", value: 92 },
-            { shortLabel: "Ester-Lipid", value: 88 },
-            { shortLabel: "Phổ IR/MS", value: 95 },
-            { shortLabel: "Nhiệt hóa học", value: 84 },
-            { shortLabel: "Cân bằng ĐL", value: 86 },
-            { shortLabel: "Động hóa học", value: 89 }
+            { shortLabel: "Oxi hóa-Khử", value: getRate("Phản ứng Oxi hóa - Khử & Điện hóa") },
+            { shortLabel: "Ester-Lipid", value: getRate("Ester - Lipid & Thủy phân") },
+            { shortLabel: "Phổ IR/MS", value: getRate("Hợp chất Hữu cơ & Phổ phân tử (IR/MS)") },
+            { shortLabel: "Nhiệt hóa học", value: getRate("Nhiệt hóa học & Năng lượng") },
+            { shortLabel: "Cân bằng ĐL", value: getRate("Cân bằng Hóa học & Dung dịch Điện li") },
+            { shortLabel: "Động hóa học", value: getRate("Động hóa học & Tốc độ phản ứng") }
           ];
         }
         return [
-          { shortLabel: "Lượng giác", value: 90 },
-          { shortLabel: "CSC & CSN", value: 94 },
-          { shortLabel: "Giới hạn", value: 87 },
-          { shortLabel: "Mũ-Lôgarit", value: 89 },
-          { shortLabel: "Đạo hàm", value: 93 },
-          { shortLabel: "Xác suất", value: 85 }
+          { shortLabel: "Lượng giác", value: getRate("Hàm số Lượng giác & Phương trình Lượng giác") },
+          { shortLabel: "CSC & CSN", value: getRate("Dãy số - Cấp số cộng - Cấp số nhân") },
+          { shortLabel: "Giới hạn", value: getRate("Giới hạn & Hàm số Liên tục") },
+          { shortLabel: "Mũ-Lôgarit", value: getRate("Hàm số Mũ & Lôgarit") },
+          { shortLabel: "Đạo hàm", value: getRate("Đạo hàm & Ứng dụng Tối ưu") },
+          { shortLabel: "Xác suất", value: getRate("Xác suất & Tổ hợp") }
         ];
-      }, [activeSubject]);
+      }, [activeSubject, topicStats]);
 
       const avgScore10 = useMemo(() => {
-        if (quizHistory.length === 0) return "8.5";
+        if (quizHistory.length === 0) return "0.0";
         const sum = quizHistory.reduce((acc, item) => acc + Number(item.score || 0), 0);
         return (sum / quizHistory.length).toFixed(1);
       }, [quizHistory]);
 
       const trapMasteryAvg = useMemo(() => {
-        if (traps.length === 0) return 85;
+        if (traps.length === 0) return 0;
         const sum = traps.reduce((acc, t) => acc + Number(t.mastery || 0), 0);
         return Math.round(sum / traps.length);
       }, [traps]);
+
+      const completedDaysCount = useMemo(() => {
+        return (userProfile.activity7Days || []).filter(Boolean).length;
+      }, [userProfile.activity7Days]);
 
       const isForcedMobile = layoutMode === "mobile";
       const isZenMode = layoutMode === "zen";
@@ -1373,6 +1569,153 @@
             <div className="fixed top-4 right-4 z-50 max-w-md px-4 py-3 rounded-2xl bg-emerald-500 text-slate-950 font-semibold shadow-2xl flex items-center gap-3 animate-bounce">
               <i className="fa-solid fa-circle-check text-lg"></i>
               <span className="text-sm break-words">{toastMsg}</span>
+            </div>
+          )}
+
+          {/* ====================================================================
+              GIAO DIỆN ĐĂNG NHẬP & ĐĂNG KÝ TÀI KHOẢN (AUTH PORTAL MODAL)
+             ==================================================================== */}
+          {authModalOpen && (
+            <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto">
+              <div className={"w-full max-w-md rounded-3xl border p-6 md:p-7 space-y-5 shadow-2xl " + currentTheme.panel}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={"w-11 h-11 rounded-2xl flex items-center justify-center font-extrabold text-lg " + currentTheme.accentBg}>
+                      <i className="fa-solid fa-user-astronaut"></i>
+                    </div>
+                    <div>
+                      <h2 className="font-extrabold text-base md:text-lg">Đăng Nhập Hệ Sinh Thái</h2>
+                      <p className="text-xs opacity-75">Đồng bộ dữ liệu học tập lên Cloud Supabase</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setAuthModalOpen(false)}
+                    title="Đóng"
+                    className="w-8 h-8 rounded-xl border border-slate-700 flex items-center justify-center hover:bg-slate-800"
+                  >
+                    <i className="fa-solid fa-xmark text-sm"></i>
+                  </button>
+                </div>
+
+                {/* Chuyển đổi phương thức đăng nhập */}
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-950/60 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("google")}
+                    className={"py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all " + (authMode === "google" ? "bg-white text-slate-950 shadow" : "opacity-75")}
+                  >
+                    <i className="fa-brands fa-google text-red-500"></i>
+                    <span>Tài khoản Google</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("email")}
+                    className={"py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all " + (authMode === "email" ? currentTheme.accentBg : "opacity-75")}
+                  >
+                    <i className="fa-solid fa-envelope"></i>
+                    <span>Email & Mật khẩu</span>
+                  </button>
+                </div>
+
+                <form onSubmit={handleAuthSubmit} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="font-bold opacity-80 block mb-1">Họ và tên học sinh *</label>
+                    <input
+                      type="text"
+                      required
+                      value={authForm.fullName}
+                      onChange={(e) => setAuthForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                      placeholder="Ví dụ: Nguyễn Tùng Dương"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold opacity-80 block mb-1">
+                      {authMode === "google" ? "Địa chỉ Gmail Google *" : "Địa chỉ Email học tập *"}
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={authForm.email}
+                      onChange={(e) => setAuthForm((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="Ví dụ: nguyentungduong.hncte@gmail.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold opacity-80 block mb-1">Trường / Lớp</label>
+                    <input
+                      type="text"
+                      value={authForm.schoolClass}
+                      onChange={(e) => setAuthForm((prev) => ({ ...prev, schoolClass: e.target.value }))}
+                      placeholder="Ví dụ: Lớp 10 - THPT Mê Linh"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+
+                  {authMode === "email" && (
+                    <div>
+                      <label className="font-bold opacity-80 block mb-1">Mật khẩu bảo mật</label>
+                      <input
+                        type="password"
+                        value={authForm.password}
+                        onChange={(e) => setAuthForm((prev) => ({ ...prev, password: e.target.value }))}
+                        placeholder="Nhập mật khẩu tự chọn..."
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/80 text-slate-100 border border-slate-700 focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className={
+                      "w-full py-3 rounded-2xl font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 " +
+                      (authMode === "google" ? "bg-white text-slate-950 hover:bg-slate-200" : currentTheme.accentBg)
+                    }
+                  >
+                    {authMode === "google" ? (
+                      <i className="fa-brands fa-google text-red-500 text-base"></i>
+                    ) : (
+                      <i className="fa-solid fa-right-to-bracket"></i>
+                    )}
+                    <span>
+                      {authLoading
+                        ? "Đang kết nối Supabase..."
+                        : authMode === "google"
+                        ? "Tiếp tục với Tài khoản Google"
+                        : "Đăng Nhập / Tạo Hồ Sơ Mới"}
+                    </span>
+                  </button>
+                </form>
+
+                {/* Nút điền nhanh thông tin Tác giả hoặc dùng chế độ Khách (Bắt đầu từ 0) */}
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAuthForm({
+                        fullName: APP_CONFIG.AUTHOR_INFO.authorName,
+                        email: APP_CONFIG.AUTHOR_INFO.supportEmail,
+                        schoolClass: APP_CONFIG.AUTHOR_INFO.schoolName,
+                        password: ""
+                      })
+                    }
+                    className="text-emerald-400 hover:underline font-semibold"
+                  >
+                    ⚡ Điền nhanh Gmail của tôi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthModalOpen(false)}
+                    className="opacity-70 hover:opacity-100"
+                  >
+                    Trải nghiệm chế độ Khách (0 XP) →
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1457,6 +1800,10 @@
               {!sidebarCollapsed && (
                 <div className="p-4 border-t border-slate-800/60 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
+                    <span className="opacity-75">👤 Tài khoản:</span>
+                    <span className="font-bold truncate max-w-[140px]">{userProfile.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
                     <span className="opacity-75">🔥 Chuỗi học:</span>
                     <span className="font-bold text-amber-400">{userProfile.streak} ngày</span>
                   </div>
@@ -1524,6 +1871,16 @@
                     <span className="text-amber-300">🏆 {userProfile.rankTitle}</span>
                   </div>
 
+                  {/* Nút Reset dữ liệu về 0 */}
+                  <button
+                    onClick={handleResetAllToZero}
+                    title="Reset toàn bộ điểm số, XP, lịch sử làm bài về 0"
+                    className="px-2.5 py-1.5 rounded-xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-bold flex items-center gap-1"
+                  >
+                    <i className="fa-solid fa-rotate-left"></i>
+                    <span className="hidden xl:inline">Reset về 0</span>
+                  </button>
+
                   <button
                     onClick={handleFullscreenToggle}
                     title="Phóng Toàn Màn Hình"
@@ -1541,13 +1898,33 @@
                     <i className={"fa-solid fa-chevron-" + (uiStudioOpen ? "up" : "down") + " text-[10px]"}></i>
                   </button>
 
-                  <button
-                    onClick={handleGoogleLogin}
-                    className="px-3.5 py-1.5 rounded-xl bg-white text-slate-900 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 shadow"
-                  >
-                    <i className="fa-brands fa-google text-red-500"></i>
-                    <span>{userProfile.loggedIn ? userProfile.name : "🌐 Đăng nhập Google"}</span>
-                  </button>
+                  {/* Nút mở Giao diện Đăng nhập Google / Tài khoản */}
+                  {userProfile.loggedIn ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setAuthModalOpen(true)}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5"
+                      >
+                        <i className="fa-solid fa-circle-user"></i>
+                        <span className="max-w-[130px] truncate">{userProfile.name}</span>
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        title="Đăng xuất"
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-500/30 text-xs font-bold"
+                      >
+                        <i className="fa-solid fa-power-off"></i>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setAuthModalOpen(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-white text-slate-900 hover:bg-slate-200 font-bold text-xs flex items-center gap-1.5 shadow"
+                    >
+                      <i className="fa-brands fa-google text-red-500"></i>
+                      <span>🌐 Đăng nhập Google</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1627,9 +2004,6 @@
                         </button>
                       ))}
                     </div>
-                    <p className="text-[11px] opacity-70 pt-1">
-                      Tự động thu phóng toàn bộ văn bản và ký hiệu toán/hóa học ngay lập tức.
-                    </p>
                   </div>
                 </div>
               )}
@@ -1673,12 +2047,12 @@
                       </div>
                     </div>
 
-                    {/* Thẻ 2 */}
+                    {/* Thẻ 2: Gamification (Khởi đầu từ 0) */}
                     <div className={"rounded-3xl border p-6 flex flex-col justify-between " + currentTheme.panel}>
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold uppercase tracking-wider opacity-75">
-                            Hồ sơ Gamification
+                            Hồ sơ Gamification ({userProfile.name})
                           </span>
                           <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold">
                             🏆 {userProfile.rankTitle}
@@ -1703,18 +2077,33 @@
                       <div className="pt-4 space-y-2">
                         <div className="flex items-center justify-between text-xs">
                           <span className="opacity-75 font-medium">Lịch chăm chỉ 7 ngày (Activity Heatmap):</span>
-                          <span className="text-emerald-400 font-bold">100% Hoàn thành</span>
+                          <span className="text-emerald-400 font-bold">
+                            {Math.round((completedDaysCount / 7) * 100)}% ({completedDaysCount}/7 ngày)
+                          </span>
                         </div>
                         <div className="grid grid-cols-7 gap-2">
-                          {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((day) => (
-                            <div
-                              key={day}
-                              className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-center"
-                            >
-                              <div className="text-[10px] opacity-75">{day}</div>
-                              <i className="fa-solid fa-fire text-emerald-400 text-xs mt-1"></i>
-                            </div>
-                          ))}
+                          {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((day, idx) => {
+                            const activeDay = Boolean(userProfile.activity7Days?.[idx]);
+                            return (
+                              <div
+                                key={day}
+                                className={
+                                  "p-2 rounded-xl border text-center transition-all " +
+                                  (activeDay
+                                    ? "bg-emerald-500/20 border-emerald-500/40"
+                                    : "bg-slate-950/40 border-slate-800 opacity-50")
+                                }
+                              >
+                                <div className="text-[10px] opacity-75">{day}</div>
+                                <i
+                                  className={
+                                    "fa-solid text-xs mt-1 " +
+                                    (activeDay ? "fa-fire text-emerald-400" : "fa-minus text-slate-600")
+                                  }
+                                ></i>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
@@ -1772,7 +2161,7 @@
                     </div>
                   </div>
 
-                  {/* HÀNG 2: 4 THẺ KPI */}
+                  {/* HÀNG 2: 4 THẺ KPI (DỮ LIỆU THỰC TẾ KHỞI ĐẦU TỪ 0) */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className={"p-5 rounded-3xl border " + currentTheme.panel}>
                       <div className="text-xs opacity-75">Tổng số chuyên đề Hóa - Toán</div>
@@ -1784,14 +2173,16 @@
                     <div className={"p-5 rounded-3xl border " + currentTheme.panel}>
                       <div className="text-xs opacity-75">Số lần luyện tập</div>
                       <div className="text-2xl md:text-3xl font-extrabold mt-1">{quizHistory.length} Lượt</div>
-                      <div className="text-[11px] text-cyan-400 mt-1">Lưu lịch sử tiến bộ tự động</div>
+                      <div className="text-[11px] text-cyan-400 mt-1">Lưu lịch sử tiến bộ thực tế</div>
                     </div>
                     <div className={"p-5 rounded-3xl border " + currentTheme.panel}>
                       <div className="text-xs opacity-75">Điểm trung bình hệ 10</div>
                       <div className="text-2xl md:text-3xl font-extrabold text-amber-400 mt-1">
                         {avgScore10} / 10
                       </div>
-                      <div className="text-[11px] opacity-75 mt-1">Đánh giá năng lực chuẩn KHTN</div>
+                      <div className="text-[11px] opacity-75 mt-1">
+                        {quizHistory.length === 0 ? "Chưa có lượt làm bài" : "Tính từ " + quizHistory.length + " đề đã nộp"}
+                      </div>
                     </div>
                     <div className={"p-5 rounded-3xl border " + currentTheme.panel}>
                       <div className="text-xs opacity-75">Tỷ lệ vượt Bẫy kiến thức</div>
@@ -1866,22 +2257,44 @@
                           Xem Kho Bẫy ({traps.length}) →
                         </button>
                       </div>
-                      <div className="space-y-3">
-                        {traps.slice(0, 4).map((trap) => (
-                          <div
-                            key={trap.id}
-                            className="p-3.5 rounded-2xl bg-slate-950/45 border border-slate-800/80 space-y-1.5"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-sm text-amber-300">{trap.title}</span>
-                              <span className="text-xs font-bold text-emerald-400">{trap.mastery}% Mastery</span>
-                            </div>
-                            <div className="text-xs opacity-85">
-                              <MathChemText content={trap.correctPrinciple} />
-                            </div>
+
+                      {traps.length === 0 ? (
+                        <div className="p-6 rounded-2xl bg-slate-950/45 border border-dashed border-slate-800 text-center space-y-3">
+                          <i className="fa-solid fa-shield-heart text-2xl text-emerald-400"></i>
+                          <div className="text-xs font-bold">
+                            Hiện tại bạn chưa mắc bẫy kiến thức nào (0 bẫy).
                           </div>
-                        ))}
-                      </div>
+                          <p className="text-[11px] opacity-70">
+                            Khi bạn làm sai câu hỏi trong Phòng Thi, hệ thống sẽ tự động phân tích và lưu bẫy vào đây để nhắc ôn tập.
+                          </p>
+                          <button
+                            onClick={() => {
+                              setTraps(REFERENCE_TRAPS);
+                              showToast("Đã nạp 3 bẫy lý thuyết mẫu vào Kho Bẫy!");
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold"
+                          >
+                            + Nạp bộ Bẫy lý thuyết mẫu để tham khảo
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {traps.slice(0, 4).map((trap) => (
+                            <div
+                              key={trap.id}
+                              className="p-3.5 rounded-2xl bg-slate-950/45 border border-slate-800/80 space-y-1.5"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold text-sm text-amber-300">{trap.title}</span>
+                                <span className="text-xs font-bold text-emerald-400">{trap.mastery}% Mastery</span>
+                              </div>
+                              <div className="text-xs opacity-85">
+                                <MathChemText content={trap.correctPrinciple} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2211,7 +2624,7 @@
                                   • Các câu làm sai đã được đẩy tự động vào <strong>Kho Bẫy Kiến Thức</strong>.
                                 </p>
                                 <p className="opacity-85">
-                                  • Khuyến nghị: Ôn lại chuyên đề có câu sai và luyện tập lặp lại ngắt quãng.
+                                  • Biểu đồ Radar 6 trục và Lịch sử điểm đã cập nhật theo kết quả bài thi.
                                 </p>
                               </div>
                               <button
@@ -2325,75 +2738,106 @@
                         <span>Kho Bẫy Kiến Thức & Lặp Lại Ngắt Quãng (Spaced Repetition)</span>
                       </h2>
                       <p className="text-xs opacity-75 mt-1">
-                        Lưu trữ các bẫy tư duy thường gặp kèm nguyên lý chuẩn và thanh tiến độ khắc phục (% Mastery).
+                        Lưu trữ các câu hỏi bạn đã làm sai kèm nguyên lý chuẩn và thanh tiến độ khắc phục (% Mastery).
                       </p>
                     </div>
-                    <div className="px-4 py-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-bold">
-                      Trung bình khắc phục: {trapMasteryAvg}% Mastery
+                    <div className="flex items-center gap-2">
+                      {traps.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setTraps([]);
+                            showToast("Đã xóa toàn bộ Kho Bẫy về 0!");
+                          }}
+                          className="px-3 py-2 rounded-xl bg-rose-500/15 border border-rose-500/35 text-rose-300 text-xs font-bold"
+                        >
+                          Xóa sạch Kho Bẫy
+                        </button>
+                      )}
+                      <div className="px-4 py-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-xs font-bold">
+                        Trung bình khắc phục: {trapMasteryAvg}% Mastery
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {traps.map((trap) => (
-                      <div
-                        key={trap.id}
-                        className={"rounded-3xl border p-6 space-y-4 flex flex-col justify-between " + currentTheme.panel}
+                  {traps.length === 0 ? (
+                    <div className={"rounded-3xl border p-10 text-center space-y-3 " + currentTheme.panel}>
+                      <i className="fa-solid fa-circle-check text-3xl text-emerald-400"></i>
+                      <h3 className="font-extrabold text-base">Kho Bẫy đang trống (0 lỗi sai)</h3>
+                      <p className="text-xs opacity-75 max-w-md mx-auto">
+                        Mọi câu trả lời sai của bạn trong Phòng Thi Đa Định Dạng sẽ tự động được trích xuất vào đây để bạn ôn tập.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setTraps(REFERENCE_TRAPS);
+                          showToast("Đã nạp 3 bẫy lý thuyết mẫu!");
+                        }}
+                        className={"px-4 py-2.5 rounded-xl text-xs font-bold " + currentTheme.accentBg}
                       >
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-bold">
-                              {trap.subject === "chemistry" ? "🧪 Bẫy Hóa học" : "📐 Bẫy Toán học"}
-                            </span>
-                            <span className="text-xs opacity-75">Lịch ôn: {trap.nextReview}</span>
+                        + Nạp 3 Bẫy Lý Thuyết Trọng Tâm Mẫu
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      {traps.map((trap) => (
+                        <div
+                          key={trap.id}
+                          className={"rounded-3xl border p-6 space-y-4 flex flex-col justify-between " + currentTheme.panel}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-bold">
+                                {trap.subject === "chemistry" ? "🧪 Bẫy Hóa học" : "📐 Bẫy Toán học"}
+                              </span>
+                              <span className="text-xs opacity-75">Lịch ôn: {trap.nextReview}</span>
+                            </div>
+                            <h3 className="font-extrabold text-base">{trap.title}</h3>
+                            <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs space-y-1">
+                              <div className="font-bold text-rose-300">❌ Thói quen dễ sai:</div>
+                              <MathChemText content={trap.wrongHabit} />
+                            </div>
+                            <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-1">
+                              <div className="font-bold text-emerald-300">✅ Nguyên lý & Công thức chuẩn:</div>
+                              <MathChemText content={trap.correctPrinciple} />
+                            </div>
                           </div>
-                          <h3 className="font-extrabold text-base">{trap.title}</h3>
-                          <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs space-y-1">
-                            <div className="font-bold text-rose-300">❌ Thói quen dễ sai:</div>
-                            <MathChemText content={trap.wrongHabit} />
-                          </div>
-                          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-1">
-                            <div className="font-bold text-emerald-300">✅ Nguyên lý & Công thức chuẩn:</div>
-                            <MathChemText content={trap.correctPrinciple} />
-                          </div>
-                        </div>
 
-                        <div className="space-y-2 pt-2">
-                          <div className="flex items-center justify-between text-xs font-bold">
-                            <span>Tiến độ khắc phục (% Mastery)</span>
-                            <span className="text-emerald-400">{trap.mastery}%</span>
-                          </div>
-                          <div className="w-full h-2.5 rounded-full bg-slate-950 overflow-hidden">
-                            <div
-                              className="h-full bg-emerald-500 transition-all duration-500"
-                              style={{ width: trap.mastery + "%" }}
-                            />
-                          </div>
-                          <div className="flex justify-end pt-1">
-                            <button
-                              onClick={() => {
-                                setTraps((prev) =>
-                                  prev.map((t) =>
-                                    t.id === trap.id
-                                      ? {
-                                          ...t,
-                                          mastery: Math.min(100, t.mastery + 15),
-                                          nextReview: "3 ngày tới"
-                                        }
-                                      : t
-                                  )
-                                );
-                                setUserProfile((prev) => ({ ...prev, xp: prev.xp + 15 }));
-                                showToast("Đã ôn tập bẫy kiến thức (+15% Mastery & +15 XP)!");
-                              }}
-                              className={"px-3.5 py-2 rounded-xl text-xs font-bold " + currentTheme.accentBg}
-                            >
-                              ✓ Đánh dấu Đã Ôn Tập (+15% Mastery)
-                            </button>
+                          <div className="space-y-2 pt-2">
+                            <div className="flex items-center justify-between text-xs font-bold">
+                              <span>Tiến độ khắc phục (% Mastery)</span>
+                              <span className="text-emerald-400">{trap.mastery}%</span>
+                            </div>
+                            <div className="w-full h-2.5 rounded-full bg-slate-950 overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500 transition-all duration-500"
+                                style={{ width: trap.mastery + "%" }}
+                              />
+                            </div>
+                            <div className="flex justify-end pt-1">
+                              <button
+                                onClick={() => {
+                                  setTraps((prev) =>
+                                    prev.map((t) =>
+                                      t.id === trap.id
+                                        ? {
+                                            ...t,
+                                            mastery: Math.min(100, t.mastery + 25),
+                                            nextReview: "3 ngày tới"
+                                          }
+                                        : t
+                                    )
+                                  );
+                                  showToast("Đã cập nhật tiến độ khắc phục bẫy (+25% Mastery)!");
+                                }}
+                                className={"px-3.5 py-2 rounded-xl text-xs font-bold " + currentTheme.accentBg}
+                              >
+                                ✓ Đánh dấu Đã Ôn Tập (+25% Mastery)
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2637,7 +3081,7 @@
                 </div>
               )}
 
-              {/* PHÂN KHU 7: TIẾN ĐỘ, BIỂU ĐỒ RADAR 6 TRỤC & BẢNG XẾP HẠNG */}
+              {/* PHÂN KHU 7: TIẾN ĐỘ, BIỂU ĐỒ RADAR 6 TRỤC & BẢNG XẾP HẠNG THỰC TẾ */}
               {activeTab === "analytics" && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2648,7 +3092,7 @@
                             Biểu đồ SVG Radar 6 Trục ({activeSubject === "chemistry" ? "Môn Hóa Học" : "Môn Toán Học"})
                           </h3>
                           <p className="text-xs opacity-75">
-                            Phân tích đa chiều mức độ làm chủ 6 chuyên đề cốt lõi
+                            Tính toán trực tiếp từ tỷ lệ làm đúng từng chuyên đề của bạn
                           </p>
                         </div>
                       </div>
@@ -2672,9 +3116,14 @@
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="font-extrabold text-base flex items-center gap-2">
                         <i className="fa-solid fa-trophy text-amber-400"></i>
-                        <span>Bảng Xếp Hạng Đua Top KHTN (Top XP • Top Streak • Top Rank)</span>
+                        <span>Bảng Xếp Hạng Thực Tế (Đồng bộ từ Supabase)</span>
                       </h3>
-                      <span className="text-xs opacity-75">Đồng bộ Realtime</span>
+                      <button
+                        onClick={fetchRealtimeLeaderboard}
+                        className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold"
+                      >
+                        🔄 Làm mới Bảng xếp hạng
+                      </button>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -2689,51 +3138,39 @@
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60">
-                          {[
-                            {
-                              name: userProfile.name + " (Bạn)",
-                              rank: userProfile.rankTitle,
-                              streak: userProfile.streak,
-                              xp: userProfile.xp,
-                              highlight: true
-                            },
-                            {
-                              name: "Nguyễn Minh Khôi - Chuyên Hóa",
-                              rank: "Bậc Thầy Phân Tử",
-                              streak: 19,
-                              xp: 2790,
-                              highlight: false
-                            },
-                            {
-                              name: "Trần Bảo Ngọc - Đội tuyển Toán",
-                              rank: "Kiến Trúc Sư Giải Tích",
-                              streak: 15,
-                              xp: 2640,
-                              highlight: false
-                            },
-                            {
-                              name: "Lê Hoàng Nam - KHTN",
-                              rank: "Chiến Binh Lượng Tử",
-                              streak: 11,
-                              xp: 2410,
-                              highlight: false
-                            }
-                          ]
-                            .sort((a, b) => b.xp - a.xp)
-                            .map((row, index) => (
-                              <tr
-                                key={row.name}
-                                className={row.highlight ? "bg-emerald-500/15 font-bold" : ""}
-                              >
-                                <td className="py-3 px-3 font-extrabold text-amber-400">#{index + 1}</td>
-                                <td className="py-3 px-3">{row.name}</td>
-                                <td className="py-3 px-3">{row.rank}</td>
-                                <td className="py-3 px-3 text-amber-300">🔥 {row.streak} ngày</td>
-                                <td className={"py-3 px-3 font-bold " + currentTheme.accentText}>
-                                  ⚡ {row.xp} XP
-                                </td>
-                              </tr>
-                            ))}
+                          {(leaderboardList.length > 0
+                            ? leaderboardList.map((item) => ({
+                                name: item.full_name,
+                                email: item.email,
+                                rank: item.rank_title || computeRankByXP(item.xp),
+                                streak: item.streak || 0,
+                                xp: item.xp || 0,
+                                highlight: userProfile.email && item.email === userProfile.email
+                              }))
+                            : [
+                                {
+                                  name: userProfile.name + " (Bạn)",
+                                  email: userProfile.email,
+                                  rank: userProfile.rankTitle,
+                                  streak: userProfile.streak,
+                                  xp: userProfile.xp,
+                                  highlight: true
+                                }
+                              ]
+                          ).map((row, index) => (
+                            <tr
+                              key={(row.email || row.name) + "_" + index}
+                              className={row.highlight ? "bg-emerald-500/15 font-bold" : ""}
+                            >
+                              <td className="py-3 px-3 font-extrabold text-amber-400">#{index + 1}</td>
+                              <td className="py-3 px-3">{row.name}</td>
+                              <td className="py-3 px-3">{row.rank}</td>
+                              <td className="py-3 px-3 text-amber-300">🔥 {row.streak} ngày</td>
+                              <td className={"py-3 px-3 font-bold " + currentTheme.accentText}>
+                                ⚡ {row.xp} XP
+                              </td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
